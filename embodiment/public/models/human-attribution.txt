@@ -1,0 +1,9 @@
+Animated Human model
+Original artist: Quaternius
+License: CC0 1.0 Universal (public domain dedication)
+Source model: https://github.com/UMRAM-Bilkent/supine-human-model/blob/main/assets/human.glb
+Original asset pack: https://quaternius.com/packs/ultimateanimatedcharacter.html
+
+The source repository identifies this rigged model and its eight animations as
+an original CC0 Quaternius asset. Attribution is optional; it is included here
+as a courtesy.

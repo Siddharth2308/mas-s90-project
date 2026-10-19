@@ -19,10 +19,11 @@ const LETTER_TO_VISEME = {
 export class Mouth {
   constructor(head, eyes) {
     // Place the mouth on the front of the head, low on the face.
-    const box = new THREE.Box3().setFromObject(head, true);
-    const size = box.getSize(new THREE.Vector3());
-    const w = size.x * 0.32;
-    const h = size.y * 0.14;
+    const box = eyes ? new THREE.Box3().setFromObject(head, true) : null;
+    const size = box?.getSize(new THREE.Vector3());
+    const localToWorld = eyes ? 1 : Math.max(head.getWorldScale(new THREE.Vector3()).x, 0.001);
+    const w = eyes ? size.x * 0.32 : 0.24 / localToWorld;
+    const h = eyes ? size.y * 0.14 : 0.08 / localToWorld;
 
     const shape = new THREE.Shape();
     const r = h * 0.45;
@@ -41,14 +42,20 @@ export class Mouth {
       new THREE.MeshBasicMaterial({ color: 0x55e6ff, toneMapped: false }),
     );
     // Find the face surface by casting a ray at the head from the front.
-    const eyesBox = new THREE.Box3().setFromObject(eyes, true);
-    const x = (eyesBox.min.x + eyesBox.max.x) / 2; // centered between the eyes
-    const y = box.min.y + size.y * 0.24;
-    const ray = new THREE.Raycaster(new THREE.Vector3(x, y, box.max.z + size.z), new THREE.Vector3(0, 0, -1));
-    const hit = ray.intersectObject(head, true)[0];
-    const z = (hit ? hit.point.z : box.max.z) + size.z * 0.035; // just in front of the bolts
-    this.mesh.position.set(x, y, z);
-    head.parent.attach(this.mesh); // follow the head bone
+    if (eyes) {
+      const eyesBox = new THREE.Box3().setFromObject(eyes, true);
+      const x = (eyesBox.min.x + eyesBox.max.x) / 2;
+      const y = box.min.y + size.y * 0.24;
+      const ray = new THREE.Raycaster(new THREE.Vector3(x, y, box.max.z + size.z), new THREE.Vector3(0, 0, -1));
+      const hit = ray.intersectObject(head, true)[0];
+      const z = (hit ? hit.point.z : box.max.z) + size.z * 0.035;
+      this.mesh.position.set(x, y, z);
+      head.parent.attach(this.mesh);
+    } else {
+      // Place the speech indicator on the human face when no rig landmarks exist.
+      this.mesh.position.set(0, 0.1 / localToWorld, 0.26 / localToWorld);
+      head.add(this.mesh);
+    }
     this.baseScale = this.mesh.scale.clone(); // attach() compensates for the bone's scale
 
     this.scale = [...VISEMES.rest];

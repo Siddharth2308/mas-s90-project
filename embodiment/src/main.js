@@ -4,10 +4,8 @@ import { loadCharacter, FX_LAYER } from './character.js';
 import { Thrower } from './projectiles.js';
 import { sfx } from './sfx.js';
 
-// Placeholder character — swap this file when the real character is chosen.
-// RobotExpressive (CC0) from the three.js examples: has Idle/Wave/Punch/... clips
-// and Angry/Surprised/Sad face morphs.
-const MODEL_URL = '/models/robot.glb';
+// Cesium Man, an animated human sample from Khronos glTF Sample Assets (CC BY 4.0).
+const MODEL_URL = '/models/human.glb';
 
 const status = document.getElementById('status');
 const caption = document.getElementById('caption');
@@ -46,10 +44,10 @@ const LINES = {
     'Wow. Bold of you to walk in here looking like that.',
   ],
   stone: ['Ow! That was a priceless antique. Me. I am the antique.', 'That did not hurt. The dent is decorative.', 'Violence? In this economy?'],
-  tomato: ['A tomato? I am a robot. I do not even eat.', 'Great. Now I smell like a salad.'],
+  tomato: ['A tomato? I was wearing that shirt.', 'Great. Now I smell like a salad.'],
   paint: ['Interesting color. Wrong, but interesting.', 'Oh look, you made art. On me. Without asking.'],
   egg: ['Rotten? Like your aim.', 'I will remember that. I remember everything.'],
-  pie: ['Cream. In my circuits. Wonderful.', 'Classic. Truly the height of comedy.'],
+  pie: ['Cream on my shirt. Wonderful.', 'Classic. Truly the height of comedy.'],
   miss: ['Ha! Missed. Want to try with your eyes open?', 'Missed me. As expected.'],
   evict: ['Wait! You cannot evict me, I have a lease! Aaaaaah!'],
   land: ['I am back. Did you miss me? Do not answer. I know you did.'],
@@ -100,7 +98,7 @@ loadCharacter(MODEL_URL, (p) => {
   c.on.cleanup = () => thrower.clearStickers(); // comes back freshly cleaned
   c.on.land = () => { sfx.land(); shake = 0.25; say(pick(LINES.land)); };
 
-  status.textContent = 'Placeholder character · drag to orbit, scroll to zoom · keys 1–5 throw, E evicts, H hides buttons';
+  status.textContent = 'Animated human · drag to orbit, scroll to zoom · keys 1–5 throw, E evicts, H hides buttons';
 }).catch((err) => {
   status.textContent = 'Failed to load character (see console)';
   console.error(err);

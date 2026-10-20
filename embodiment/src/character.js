@@ -14,30 +14,38 @@ export function loadCharacter(url, onProgress) {
 class Character {
   constructor(gltf) {
     this.root = gltf.scene;
+    this.bones = {};
+    this.root.traverse((o) => { if (o.isBone) this.bones[o.name] = o; });
+    this.root.updateMatrixWorld(true);
+    const bounds = new THREE.Box3().setFromObject(this.root);
+    const size = bounds.getSize(new THREE.Vector3());
+    const center = bounds.getCenter(new THREE.Vector3());
+    const scale = 4.8 / Math.max(size.y, 0.001);
+    this.root.scale.setScalar(scale);
+    this.root.position.set(-center.x * scale, -bounds.min.y * scale, -center.z * scale);
     this.root.updateMatrixWorld(true);
 
     // Black disappears behind the glass, so make the eyes/brows glow instead.
     // The eyes are part of the head mesh, so this also finds the head.
     let head = null;
     let eyes = null;
-    this.bones = {};
     this.root.traverse((o) => {
-      if (o.isBone) this.bones[o.name] = o;
       if (o.isMesh && o.material.name === 'Black') {
         o.material.color.set(0x000000);
         o.material.emissive.set(0x55e6ff);
         o.material.emissiveIntensity = 1.5;
         eyes = o;
-        head = o.parent.isBone ? o : o.parent;
+        head = o.parent?.isBone ? o : o.parent;
       }
     });
+    head ??= this.bone('Head') ?? this.bone('Neck') ?? this.root;
     this.head = head;
     this.mouth = new Mouth(head, eyes);
     this.mouth.mesh.layers.set(FX_LAYER);
 
     // Face morphs: Angry / Surprised / Sad
     this.faceMeshes = [];
-    head.traverse((o) => { if (o.isMesh && o.morphTargetDictionary) this.faceMeshes.push(o); });
+    head.traverse?.((o) => { if (o.isMesh && o.morphTargetDictionary) this.faceMeshes.push(o); });
     this.face = { Angry: 0, Surprised: 0, Sad: 0 };
     this.faceTarget = { Angry: 0, Surprised: 0, Sad: 0 };
     this.angryTimer = 0;
@@ -45,14 +53,17 @@ class Character {
     // Animation
     this.mixer = new THREE.AnimationMixer(this.root);
     this.actions = {};
-    for (const clip of gltf.animations) this.actions[clip.name] = this.mixer.clipAction(clip);
-    this.idle = this.actions.Idle;
-    this.idle.play();
+    for (const [i, clip] of gltf.animations.entries()) this.actions[clip.name || `Animation${i}`] = this.mixer.clipAction(clip);
+    this.idle = Object.entries(this.actions).find(([name]) => name.toLowerCase().includes('idle'))?.[1]
+      ?? Object.values(this.actions)[0];
+    if (this.idle) this.idle.setEffectiveTimeScale(0.35).play();
     this.oneShot = null;
     this.mixer.addEventListener('finished', (e) => {
       if (e.action !== this.oneShot) return;
-      this.idle.reset().play();
-      this.oneShot.crossFadeTo(this.idle, 0.3, false);
+      if (this.idle) {
+        this.idle.reset().play();
+        this.oneShot.crossFadeTo(this.idle, 0.3, false);
+      }
       this.oneShot = null;
     });
 
@@ -67,16 +78,27 @@ class Character {
 
   // three.js drops dots from names and suffixes duplicates ("Torso" -> "Torso_1").
   bone(name) {
-    const k = name.replace(/\./g, '');
-    return this.bones[k] ?? this.bones[`${k}_1`];
+    const aliases = {
+      Head: ['Head', 'head', 'Skeleton_neck_joint_2', 'Skeleton_neck_joint_1'],
+      Neck: ['Neck', 'neck', 'Skeleton_neck_joint_2', 'Skeleton_neck_joint_1'],
+      Torso: ['Torso', 'torso', 'Spine2', 'Spine1', 'Spine', 'Skeleton_torso_joint_2', 'Skeleton_torso_joint_1'],
+      Abdomen: ['Abdomen', 'Hips', 'Spine', 'Skeleton_torso_joint_1', 'Skeleton_torso_joint_2'],
+      'UpperArm.L': ['UpperArm.L', 'LeftArm', 'Skeleton_arm_joint_L__4_', 'Skeleton_arm_joint_L__3_'],
+      'UpperArm.R': ['UpperArm.R', 'RightArm', 'Skeleton_arm_joint_R', 'Skeleton_arm_joint_R__2_'],
+      'LowerArm.L': ['LowerArm.L', 'LeftForeArm', 'Skeleton_arm_joint_L__3_', 'Skeleton_arm_joint_L__2_'],
+      'LowerArm.R': ['LowerArm.R', 'RightForeArm', 'Skeleton_arm_joint_R__2_', 'Skeleton_arm_joint_R__3_'],
+    };
+    for (const k of aliases[name] ?? [name.replace(/\./g, '')]) if (this.bones[k]) return this.bones[k];
+    return Object.values(this.bones)[0];
   }
 
   // Center of the meshes attached directly to a bone (e.g. 'Head', 'Torso').
   partCenter(boneName) {
     const bone = this.bone(boneName);
+    if (!bone) return new THREE.Box3().setFromObject(this.root).getCenter(new THREE.Vector3());
     const box = new THREE.Box3();
     for (const c of bone.children) if (!c.isBone && c.layers.isEnabled(0)) box.expandByObject(c, true);
-    return box.getCenter(new THREE.Vector3());
+    return box.isEmpty() ? bone.getWorldPosition(new THREE.Vector3()) : box.getCenter(new THREE.Vector3());
   }
 
   nearestBone(point, names = ['Head', 'Torso', 'Abdomen', 'UpperArm.L', 'UpperArm.R', 'LowerArm.L', 'LowerArm.R']) {
@@ -93,17 +115,18 @@ class Character {
 
   playOnce(name) {
     const a = this.actions[name];
-    if (!a || this.oneShot || this.evict) return;
+    if (!a || a === this.idle || this.oneShot || this.evict) return;
     this.oneShot = a;
     a.reset().setLoop(THREE.LoopOnce, 1);
     a.clampWhenFinished = true;
     a.play();
-    this.idle.crossFadeTo(a, 0.2, false);
+    this.idle?.crossFadeTo(a, 0.2, false);
   }
 
   // Called by the projectile system when something lands on him.
   hit(point, dir, kind) {
     const bone = this.nearestBone(point, ['Head', 'Torso', 'Abdomen']);
+    if (!bone) return;
     const pivot = bone.getWorldPosition(new THREE.Vector3());
     const axis = new THREE.Vector3().subVectors(point, pivot).cross(dir);
     if (axis.lengthSq() < 1e-6) axis.set(1, 0, 0);
@@ -124,7 +147,7 @@ class Character {
 
   startEvict() {
     if (this.evict) return false;
-    if (this.oneShot) { this.oneShot.stop(); this.oneShot = null; this.idle.reset().play(); }
+    if (this.oneShot) { this.oneShot.stop(); this.oneShot = null; this.idle?.reset().play(); }
     this.evict = { phase: 'crouch', t: 0, vy: 0, spin: 0 };
     this.face.Surprised = 1;
     return true;
@@ -198,7 +221,7 @@ class Character {
       if (r.position.y <= 0) {
         r.position.y = 0;
         e.phase = 'land'; e.t = 0;
-        this.jolts.push({ bone: this.bone('Torso'), axis: new THREE.Vector3(1, 0, 0), amp: 0.25, t: 0 });
+        this.jolts.push({ bone: this.bone('Torso') ?? this.root, axis: new THREE.Vector3(1, 0, 0), amp: 0.25, t: 0 });
         this.face.Surprised = 1;
         this.angryTimer = 2;
         this.on.land?.();

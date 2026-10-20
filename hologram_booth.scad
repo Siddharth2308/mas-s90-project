@@ -24,7 +24,7 @@ door_open_deg = 70;
 /* [Glass] */
 glass_w_in = 24;         // horizontal edge
 glass_h_in = 36;         // vertical edge (stand the sheet on its short side)
-glass_bottom_in = 30;    // glass bottom edge = where the figure's feet are
+glass_bottom_in = 30.77;   // glass bottom edge = where the figure's feet are
 glass_t = 0.6;
 
 /* [TV] */
@@ -52,6 +52,23 @@ show_drapes = true;
 show_rays = true;
 show_labels = true;
 
+/* [Frame] */
+frame = "pvc";           // [pvc, pipe_drape]  pvc = PVC cage + PVC glass stand, pipe_drape = rented uprights + T-slot
+
+/* [PVC (inches, centerline to centerline)] */
+pvc_od_in = 1.315;       // 1" Schedule 40
+fit_in = 0.875;          // fitting center -> socket bottom. Measure one fitting and set this!
+cage_w_in = 41.12;     // 100 cm rails
+cage_d_in = 41.12;
+cage_post_cc_in = 80.49; // bottom corner center -> top corner center
+front_rail_lo_in = 26.03;  // fascia rails, kept just outside the viewing window
+front_rail_hi_in = 69.12;
+stand_w_in = 25.77;      // glass stand post spacing (glass width + room for the clips)
+stand_leg_in = 5.9;        // foot leg cut length
+saddle_in = 0.15;        // printed saddle under the glass
+top_gap_in = 0.51;       // glass top -> top rail
+cap_in = 0.2;            // end cap past the pipe end
+
 // ---------- derived ----------
 glass_w   = glass_w_in * IN;
 glass_h   = glass_h_in * IN;
@@ -74,22 +91,97 @@ gx      = left_x + stand_d + tv_depth + figure_gap;  // glass back-left end
 gy      = fig_y + figure_gap;
 tv_x    = gx - figure_gap;                           // TV screen plane
 tv_yc   = gy + span / 2;
-front_y = tv_yc + tv_body_w / 2 + 4;
-hood_z  = hood_in * IN;
 fig_h   = figure_h_in * IN;
 fig_xc  = gx + span / 2;
+
+// PVC cage: pipe centerlines. The back drape stays at back_y, just outside the back pipes.
+PVC = frame == "pvc";
+pr  = pvc_od_in * IN / 2;
+cage_w = cage_w_in * IN;
+cage_d = cage_d_in * IN;
+cx0 = (left_x + right_x - cage_w) / 2;
+cx1 = cx0 + cage_w;
+cy0 = back_y - pr;
+cy1 = cy0 + cage_d;
+cz0 = pr;
+cz1 = cz0 + cage_post_cc_in * IN;
+rail_lo = front_rail_lo_in * IN;
+rail_hi = front_rail_hi_in * IN;
+
+// outer faces of the booth (drapes / fascia go here)
+ox0     = PVC ? cx0 - pr : left_x;
+ox1     = PVC ? cx1 + pr : right_x;
+front_y = PVC ? cy1 + pr : tv_yc + tv_body_w / 2 + 4;
+hood_z  = PVC ? cz1 + pr : hood_in * IN;
+
+// PVC glass stand: in the glass plane, centered on the glass
+dir  = [1, 1] / sqrt(2);                 // along the glass (plan)
+nrm  = [-1, 1] / sqrt(2);                // across the glass (plan)
+gc   = [gx + span / 2, gy + span / 2];
+sp   = [gc - dir * stand_w_in * IN / 2, gc + dir * stand_w_in * IN / 2];  // post positions
+sz_b = glass_bot - pr - saddle_in * IN;  // bottom rail center
+sz_t = glass_top + pr + top_gap_in * IN; // top rail center
+leg_reach = (fit_in + stand_leg_in + cap_in) * IN;
 
 win_x0 = gx - 4;               // window = open part of the front fascia
 win_z0 = glass_bot - 4;
 win_z1 = glass_top + 4;
 
-echo(str("Booth footprint: ", round(booth_w), " x ", round(front_y - back_y + 0.5), " cm, height ", round(hood_z), " cm"));
+echo(str("Booth footprint: ", round(ox1 - ox0), " x ", round(front_y - back_y + 0.5), " cm, height ", round(hood_z), " cm"));
 echo(str("Glass ", glass_w_in, "x", glass_h_in, " in, bottom at ", glass_bottom_in, " in; figure up to ~", figure_h_in, " in tall"));
 echo(str("Viewing distance (visitor to front): ", round(visitor_y - front_y), " cm"));
+
+// ---------- PVC cut list + checks ----------
+function cut(cc_in) = round((cc_in - 2 * fit_in) * 100) / 100;   // inches
+r_in = pvc_od_in / 2;
+cuts = [   // [name, qty, cut length in]
+    ["cage back posts",            2, cut(cage_post_cc_in)],
+    ["cage rails, front/back",     4, cut(cage_w_in)],
+    ["cage rails, sides",          4, cut(cage_d_in)],
+    ["cage fascia rails",          2, cut(cage_w_in)],
+    ["front posts, bottom",        2, cut(front_rail_lo_in - r_in)],
+    ["front posts, middle",        2, cut(front_rail_hi_in - front_rail_lo_in)],
+    ["front posts, top",           2, cut(r_in + cage_post_cc_in - front_rail_hi_in)],
+    ["glass stand rails",          2, cut(stand_w_in)],
+    ["glass stand posts, lower",   2, cut((sz_b - pr) / IN)],
+    ["glass stand posts, upper",   2, cut((sz_t - sz_b) / IN)],
+    ["glass stand feet",           4, stand_leg_in],
+];
+function total(i = 0) = i == len(cuts) ? 0 : cuts[i][1] * cuts[i][2] + total(i + 1);
+
+module checks() {
+    // feet must stay inside the cage and clear of the pedestal
+    for (p = sp, s = [-1, 1]) {
+        t = p + nrm * s * leg_reach;
+        if (t[0] < cx0 + pr || t[0] > cx1 - pr || t[1] < cy0 + pr || t[1] > cy1 - pr)
+            echo(str("WARNING: glass stand foot hits the cage at ", t));
+        if (t[0] > fig_xc - 22.5 && t[0] < fig_xc + 22.5 && t[1] < fig_y + 10)
+            echo(str("WARNING: glass stand foot hits the pedestal at ", t));
+    }
+    if (rail_lo + pr > win_z0 || rail_hi - pr < win_z1)
+        echo("WARNING: a fascia rail shows in the viewing window");
+    if (front_y - pr - (tv_yc + tv_body_w / 2) < 0.5)
+        echo("WARNING: TV touches the front of the cage");
+}
+
+if (PVC) {
+    echo("PVC CUT LIST (inches; pipe length = center-to-center - 2 x fit_in):");
+    for (c = cuts) echo(str("  ", c[1], " x ", c[2], "  ", c[0]));
+    echo(str("  total ", round(total()), " in = at least ", ceil(total() / 120), " x 10 ft sticks (plus offcuts)"));
+    echo("PVC FITTINGS: 8 x 3-way corner, 8 x tee, 2 x 90 elbow, 4 x end cap");
+    checks();
+}
 
 // ---------- helpers ----------
 module line3(a, b, r = 0.6) hull() { translate(a) sphere(r, $fn = 8); translate(b) sphere(r, $fn = 8); }
 module ext(a, b) hull() { translate(a) cube(2.54, center = true); translate(b) cube(2.54, center = true); } // 1" T-slot
+
+module pipe(a, b) {   // PVC pipe, fitting center to fitting center
+    v = b - a;
+    L = norm(v);
+    color("WhiteSmoke") translate(a) rotate([0, acos(v[2] / L), atan2(v[1], v[0])]) cylinder(r = pr, h = L, $fn = 16);
+}
+module fitting(p) color([0.1, 0.1, 0.1]) translate(p) sphere(pr * 1.45, $fn = 16);
 
 module floor_label(t, p, rot = 0, sz = 6)
     color("Black") translate([p[0], p[1], 0.2]) rotate([0, 0, rot])
@@ -190,20 +282,56 @@ module virtual_figure() {
 
 module enclosure() {
     if (show_drapes) color([0.15, 0.15, 0.15, 0.25]) {
-        translate([left_x, back_y - 0.5, 0]) cube([booth_w, 0.5, hood_z]);              // back drape
-        translate([left_x - 0.5, back_y, 0]) cube([0.5, front_y - back_y, hood_z]);      // left drape
-        translate([right_x, back_y, 0]) cube([0.5, front_y - back_y, hood_z]);           // right drape
-        translate([left_x, back_y, hood_z]) cube([booth_w, front_y - back_y, 0.5]);      // hood
+        translate([ox0, back_y - 0.5, 0]) cube([ox1 - ox0, 0.5, hood_z]);              // back drape
+        translate([ox0 - 0.5, back_y, 0]) cube([0.5, front_y - back_y, hood_z]);        // left drape
+        translate([ox1, back_y, 0]) cube([0.5, front_y - back_y, hood_z]);              // right drape
+        translate([ox0, back_y, hood_z]) cube([ox1 - ox0, front_y - back_y, 0.5]);      // hood
     }
     color([0.05, 0.05, 0.05, 0.6]) {   // front fascia (black foam board)
-        translate([left_x, front_y, 0]) cube([win_x0 - left_x, 0.5, hood_z]);            // hides the TV
-        translate([win_x0, front_y, 0]) cube([right_x - win_x0, 0.5, win_z0]);           // skirt
-        translate([win_x0, front_y, win_z1]) cube([right_x - win_x0, 0.5, hood_z - win_z1]); // header
+        translate([ox0, front_y, 0]) cube([win_x0 - ox0, 0.5, hood_z]);                 // hides the TV
+        translate([win_x0, front_y, 0]) cube([ox1 - win_x0, 0.5, win_z0]);              // skirt
+        translate([win_x0, front_y, win_z1]) cube([ox1 - win_x0, 0.5, hood_z - win_z1]); // header
         translate([win_x0 - 0.5, gy + span + 2, win_z0])                                 // side baffle
             cube([0.5, front_y - (gy + span + 2), win_z1 - win_z0]);
     }
-    color("Gray") for (x = [left_x, right_x], y = [back_y, front_y])
+    if (!PVC) color("Gray") for (x = [left_x, right_x], y = [back_y, front_y])
         translate([x, y, 0]) cylinder(r = 1.5, h = hood_z, $fn = 12);   // pipe-and-drape uprights
+}
+
+module pvc_cage() {   // 40 x 40 box + two fascia rails on the front
+    for (x = [cx0, cx1], y = [cy0, cy1]) {
+        pipe([x, y, cz0], [x, y, cz1]);
+        for (z = [cz0, cz1]) fitting([x, y, z]);                            // 3-way corners
+    }
+    for (z = [cz0, cz1]) {
+        for (y = [cy0, cy1]) pipe([cx0, y, z], [cx1, y, z]);
+        for (x = [cx0, cx1]) pipe([x, cy0, z], [x, cy1, z]);
+    }
+    for (z = [rail_lo, rail_hi]) {
+        pipe([cx0, cy1, z], [cx1, cy1, z]);
+        for (x = [cx0, cx1]) fitting([x, cy1, z]);                         // tees
+    }
+}
+
+module pvc_glass_stand() {   // free-standing at 45 deg; zip-tie the top to the cage
+    for (p = sp) {
+        pipe([p[0], p[1], pr], [p[0], p[1], sz_t]);
+        for (z = [pr, sz_b, sz_t]) fitting([p[0], p[1], z]);              // foot tee, rail tee, elbow
+        for (s = [-1, 1]) {                                                // feet + end caps
+            t = p + nrm * s * leg_reach;
+            pipe([p[0], p[1], pr], [t[0], t[1], pr]);
+            color([0.1, 0.1, 0.1]) translate([t[0], t[1], pr]) sphere(pr * 1.2, $fn = 12);
+        }
+    }
+    for (z = [sz_b, sz_t]) pipe([sp[0][0], sp[0][1], z], [sp[1][0], sp[1][1], z]);
+    // 3D-printed saddles (under the glass) and top clips
+    color("Orange") for (f = [0.15, 0.5, 0.85]) {
+        q = gc + dir * (f - 0.5) * glass_w;
+        translate([q[0], q[1], sz_b + pr]) rotate([0, 0, 45]) translate([-2, -1.5, 0])
+            cube([4, 3, glass_bot - sz_b - pr + 1.5]);
+        translate([q[0], q[1], glass_top - 1.5]) rotate([0, 0, 45]) translate([-2, -1.5, 0])
+            cube([4, 3, sz_t - glass_top + 1.5]);
+    }
 }
 
 module rays() {
@@ -221,17 +349,17 @@ module labels() {
     floor_label("ROOM 357A  215 x 360 cm", [room_w / 2 - 25, room_l - 110], 0, 7);
     floor_label("DOOR", [room_w - 25, room_l - door_w / 2 - 10], 90);
     floor_label("VISITORS", [room_w / 2, visitor_y - 40], 0, 8);
-    floor_label("55in TV, portrait", [left_x - 12, tv_yc], 90, 5);
-    floor_label(str("GLASS ", glass_w_in, "x", glass_h_in, "in @45"), [right_x + 14, gy + span / 2], 90, 5);
+    floor_label("55in TV, portrait", [ox0 - 12, tv_yc], 90, 5);
+    floor_label(str("GLASS ", glass_w_in, "x", glass_h_in, "in @45"), [ox1 + 14, gy + span / 2], 90, 5);
     front_label("virtual figure", [fig_xc, fig_y, glass_bot + fig_h + 12], 4);
-    front_label(str("booth ~", round(booth_w), " x ", round(front_y - back_y), " cm"), [room_w / 2, front_y + 1, hood_z + 12], 6);
+    front_label(str("booth ~", round(ox1 - ox0), " x ", round(front_y - back_y), " cm"), [room_w / 2, front_y + 1, hood_z + 12], 6);
 }
 
 // ---------- scene ----------
 room();
 tv();
 glass();
-glass_frame();
+if (PVC) { pvc_cage(); pvc_glass_stand(); } else glass_frame();
 pedestal();
 virtual_figure();
 enclosure();

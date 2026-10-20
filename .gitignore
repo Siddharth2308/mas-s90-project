@@ -3,3 +3,8 @@ dist/
 .vite/
 *.log
 .DS_Store
+
+# local voice (installed by embodiment/tts/setup.sh)
+.venv/
+embodiment/tts/voices/
+__pycache__/

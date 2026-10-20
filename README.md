@@ -22,10 +22,27 @@
 
 Press `Ctrl+C` in the terminal to stop it.
 
+### Talking to HARAMI (optional, one-time setup)
+
+The robot answers out loud using Claude Code (Haiku) and a local Piper voice.
+
+1. Install [Claude Code](https://claude.com/claude-code) and log in once by running `claude`.
+2. Install the voice (needs Python 3):
+   ```bash
+   npm run setup:voice
+   ```
+3. Restart `npm run dev`.
+
+Without Claude Code he answers with canned lines; without Piper he uses the browser's voice.
+His personality is in `embodiment/quarantine/persona.md` (press `N` after editing it).
+Claude Code runs inside `quarantine/` with all tools turned off, so visitors can only talk to it.
+
 ### Controls
 
 | Key | Action |
 | --- | --- |
+| Hold `Space` | Talk (or type in the box and press Enter) |
+| `N` | New visitor (fresh conversation) |
 | `1`–`5` | Throw stone / tomato / paint / egg / pie |
 | `E` | Evict |
 | `T` | Talk test |

@@ -1,0 +1,26 @@
+Quantity,Length (cm),Part,Cut from pipe #
+2,200,Cage back posts (full height),"1, 2"
+2,105,"Cage front posts, middle section",6
+10,100,Cage rails: 4 top + 4 bottom + 2 front fascia rails,"1, 2, 3, 4, 5"
+2,92,"Glass stand posts, upper section (sized for the glass)","5, 6"
+2,70,"Glass stand posts, lower section",7
+2,61,Glass stand rails (sized for the glass),8
+2,60,"Cage front posts, bottom section",7
+2,25,"Cage front posts, top section","7, 8"
+4,15,Glass stand feet,"7, 8"
+
+Pipe #,Cuts (cm),Used incl. 3 mm per cut (cm),Leftover of 304.8 cm (cm)
+1,200 + 100,300.3,4.5
+2,200 + 100,300.3,4.5
+3,100 + 100 + 100,300.6,4.2
+4,100 + 100 + 100,300.6,4.2
+5,100 + 100 + 92,292.6,12.2
+6,105 + 105 + 92,302.6,2.2
+7,70 + 70 + 60 + 60 + 25 + 15,301.5,3.3
+8,25 + 61 + 61 + 15 + 15 + 15,193.5,111.3
+
+Total pieces,28
+Pipes needed,"8 x 1 inch Sch 40 PVC, 10 ft (304.8 cm) each; buy 9-10 for spares"
+Fittings,8 x 3-way corner; 8 x tee; 2 x 90 deg elbow; 4 x end cap
+Booth size,"108 x 105 cm, 208 cm tall"
+Note,Lengths assume the pipe goes 2.2 cm past each fitting's center. Measure one fitting first.

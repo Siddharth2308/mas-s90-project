@@ -7,7 +7,7 @@ const PAINT_COLORS = ['#ff3da5', '#3dff7a', '#ffe23d', '#3da0ff', '#b03dff', '#f
 
 // What each throwable looks like, what it leaves behind, and how big the mark is.
 const KINDS = {
-  stone:  { soft: false, mark: () => dentTexture(),           size: 0.55, target: 'any' },
+  stone:  { soft: false, mark: () => bruiseTexture(),          size: 0.62, target: 'any' },
   tomato: { soft: true,  mark: () => splatTexture('#d4180f'), size: 0.95, target: 'any' },
   paint:  { soft: true,  mark: (c) => splatTexture(c),        size: 1.2,  target: 'any' },
   egg:    { soft: true,  mark: () => splatTexture('#c9c23a', '#fff6c8'), size: 0.9, target: 'any' },
@@ -99,6 +99,19 @@ export class Thrower {
       this.scene.remove(q.mesh);
       return false;
     });
+
+    // Let stone discoloration fade naturally; other splats remain until cleanup.
+    const now = performance.now();
+    this.stickers = this.stickers.filter((s) => {
+      if (s.userData.fadeStart === undefined) return true;
+      const t = (now - s.userData.fadeStart) / s.userData.fadeDuration;
+      if (t >= 1) {
+        s.removeFromParent();
+        return false;
+      }
+      if (t > 0) s.material.opacity = s.userData.baseOpacity * (1 - t);
+      return true;
+    });
   }
 
   onImpact(p, hit, dir) {
@@ -130,7 +143,7 @@ export class Thrower {
     const tex = spec.mark(p.color);
     const mat = new THREE.MeshStandardMaterial({
       map: tex, transparent: true, depthWrite: false, roughness: 0.3,
-      emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.2,
+      emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: spec.soft ? 0.2 : 0,
       polygonOffset: true, polygonOffsetFactor: -4,
     });
     const s = spec.size * (0.85 + Math.random() * 0.3);
@@ -143,6 +156,12 @@ export class Thrower {
     // stick to the body part so it moves with the animation
     const anchor = hit.object.isSkinnedMesh ? this.character.nearestBone(hit.point) : hit.object;
     anchor.attach(sticker);
+    if (p.kind === 'stone') {
+      sticker.material.opacity = 0.72;
+      sticker.userData.baseOpacity = 0.72;
+      sticker.userData.fadeStart = performance.now() + 3500;
+      sticker.userData.fadeDuration = 10000;
+    }
     this.stickers.push(sticker);
   }
 
@@ -245,25 +264,34 @@ function splatTexture(color, highlight = '#ffffff') {
   });
 }
 
-function dentTexture() {
+function bruiseTexture() {
   return canvasTexture((ctx) => {
-    const g = ctx.createRadialGradient(128, 128, 4, 128, 128, 70);
-    g.addColorStop(0, 'rgba(45,35,28,0.9)');
-    g.addColorStop(0.5, 'rgba(70,60,50,0.55)');
-    g.addColorStop(1, 'rgba(70,60,50,0)');
+    // Layered, soft-edged discoloration reads as a bruise on the robot's pale shell.
+    const g = ctx.createRadialGradient(128, 128, 5, 128, 128, 105);
+    g.addColorStop(0, 'rgba(111,70,126,0.5)');
+    g.addColorStop(0.34, 'rgba(145,86,132,0.39)');
+    g.addColorStop(0.68, 'rgba(177,111,119,0.22)');
+    g.addColorStop(1, 'rgba(177,111,119,0)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, 256, 256);
-    // bright cracks so the dent still reads on the glass
-    ctx.strokeStyle = 'rgba(255,240,215,0.95)';
-    ctx.lineWidth = 3;
-    for (let i = 0; i < 6; i++) {
+    // Uneven impact flecks keep it from looking like a flat purple sticker.
+    for (let i = 0; i < 24; i++) {
+      const a = Math.random() * Math.PI * 2, d = 18 + Math.random() * 73;
+      ctx.fillStyle = `rgba(${108 + Math.floor(Math.random() * 48)},${61 + Math.floor(Math.random() * 40)},${126 + Math.floor(Math.random() * 48)},${0.04 + Math.random() * 0.1})`;
+      ctx.beginPath();
+      ctx.ellipse(128 + Math.cos(a) * d, 128 + Math.sin(a) * d, 5 + Math.random() * 15, 4 + Math.random() * 11, a, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.strokeStyle = 'rgba(225,213,225,0.42)';
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < 4; i++) {
       let a = Math.random() * Math.PI * 2, x = 128, y = 128;
       ctx.beginPath();
       ctx.moveTo(x, y);
-      for (let s = 0; s < 4; s++) {
-        a += (Math.random() - 0.5) * 0.9;
-        x += Math.cos(a) * (14 + Math.random() * 16);
-        y += Math.sin(a) * (14 + Math.random() * 16);
+      for (let s = 0; s < 3; s++) {
+        a += (Math.random() - 0.5) * 0.7;
+        x += Math.cos(a) * (8 + Math.random() * 12);
+        y += Math.sin(a) * (8 + Math.random() * 12);
         ctx.lineTo(x, y);
       }
       ctx.stroke();

@@ -56,7 +56,7 @@ class Character {
     for (const [i, clip] of gltf.animations.entries()) this.actions[clip.name || `Animation${i}`] = this.mixer.clipAction(clip);
     this.idle = Object.entries(this.actions).find(([name]) => name.toLowerCase().includes('idle'))?.[1]
       ?? Object.values(this.actions)[0];
-    if (this.idle) this.idle.setEffectiveTimeScale(0.35).play();
+    if (this.idle) this.idle.setEffectiveTimeScale(0.72).play();
     this.oneShot = null;
     this.mixer.addEventListener('finished', (e) => {
       if (e.action !== this.oneShot) return;
@@ -69,6 +69,9 @@ class Character {
 
     this.jolts = [];       // springy hit reactions on bones
     this.lastOffsets = new Map();
+    this.elapsed = 0;
+    this.hitStreak = 0;
+    this.hitAge = Infinity;
     this.evict = null;     // eviction sequence state
     this.on = {};          // callbacks: launch, land
 
@@ -87,6 +90,8 @@ class Character {
       'UpperArm.R': ['UpperArm.R', 'RightArm', 'Skeleton_arm_joint_R', 'Skeleton_arm_joint_R__2_'],
       'LowerArm.L': ['LowerArm.L', 'LeftForeArm', 'Skeleton_arm_joint_L__3_', 'Skeleton_arm_joint_L__2_'],
       'LowerArm.R': ['LowerArm.R', 'RightForeArm', 'Skeleton_arm_joint_R__2_', 'Skeleton_arm_joint_R__3_'],
+      'UpperLeg.L': ['UpperLeg.L', 'LeftUpLeg', 'LeftLeg'],
+      'UpperLeg.R': ['UpperLeg.R', 'RightUpLeg', 'RightLeg'],
     };
     for (const k of aliases[name] ?? [name.replace(/\./g, '')]) if (this.bones[k]) return this.bones[k];
     return Object.values(this.bones)[0];
@@ -125,19 +130,38 @@ class Character {
 
   // Called by the projectile system when something lands on him.
   hit(point, dir, kind) {
-    const bone = this.nearestBone(point, ['Head', 'Torso', 'Abdomen']);
+    const bone = this.nearestBone(point, ['Head', 'Torso', 'Abdomen', 'UpperArm.L', 'UpperArm.R']);
     if (!bone) return;
+    this.hitStreak = this.hitAge < 1.4 ? this.hitStreak + 1 : 1;
+    this.hitAge = 0;
     const pivot = bone.getWorldPosition(new THREE.Vector3());
     const axis = new THREE.Vector3().subVectors(point, pivot).cross(dir);
     if (axis.lengthSq() < 1e-6) axis.set(1, 0, 0);
     axis.normalize();
     const parentQ = bone.parent.getWorldQuaternion(new THREE.Quaternion()).invert();
     axis.applyQuaternion(parentQ);
-    this.jolts.push({ bone, axis, amp: kind === 'stone' ? 0.45 : 0.3, t: 0 });
+    const force = Math.min(1.6, 1 + (this.hitStreak - 1) * 0.16);
+    this.jolts.push({ bone, axis, amp: (kind === 'stone' ? 0.52 : 0.34) * force, t: 0 });
+
+    // Spread the impulse through the torso and shoulders for a more physical stagger.
+    const torso = this.bone('Torso');
+    if (torso && torso !== bone) {
+      this.jolts.push({ bone: torso, axis: axis.clone().multiplyScalar(-1), amp: 0.13 * force, t: 0 });
+    }
+    if (bone.name === 'Head' || bone.name === 'Torso' || bone.name === 'Abdomen') {
+      // Hands come up toward the body after a hit, with a slight side bias.
+      for (const [name, side] of [['UpperArm.L', -1], ['UpperArm.R', 1]]) {
+        const arm = this.bone(name);
+        if (arm) this.jolts.push({ bone: arm, axis: new THREE.Vector3(side, 0, 1).normalize(), amp: 0.16 * force, t: 0 });
+      }
+      const leg = this.bone(point.x < pivot.x ? 'UpperLeg.L' : 'UpperLeg.R');
+      if (leg) this.jolts.push({ bone: leg, axis: new THREE.Vector3(1, 0, 0), amp: 0.07 * force, t: 0 });
+    }
 
     this.face.Surprised = 1;
-    this.angryTimer = 1.8;
-    if (kind !== 'stone' && Math.random() < 0.5) this.playOnce('No');
+    this.angryTimer = 1.8 + Math.min(1, (this.hitStreak - 1) * 0.2);
+    if (this.hitStreak >= 3) this.playOnce('No');
+    else if (kind !== 'stone' && Math.random() < 0.5) this.playOnce('No');
   }
 
   // Eye-roll while he "thinks" about your question.
@@ -250,6 +274,9 @@ class Character {
   }
 
   update(dt) {
+    this.elapsed += dt;
+    this.hitAge += dt;
+    if (this.hitAge > 1.4) this.hitStreak = 0;
     // undo last frame's jolt offsets (for bones the animation doesn't overwrite)
     for (const [bone, q] of this.lastOffsets) bone.quaternion.premultiply(q.invert());
     this.lastOffsets.clear();
@@ -261,12 +288,29 @@ class Character {
     const q = new THREE.Quaternion();
     this.jolts = this.jolts.filter((j) => (j.t += dt) < 1.2);
     for (const j of this.jolts) {
-      const a = j.amp * Math.exp(-6 * j.t) * Math.cos(16 * j.t) * Math.min(1, j.t / 0.03);
+      const a = j.amp * Math.exp(-8 * j.t) * Math.cos(11 * j.t) * Math.min(1, j.t / 0.035);
       q.setFromAxisAngle(j.axis, a);
       j.bone.quaternion.premultiply(q);
       const prev = this.lastOffsets.get(j.bone);
       this.lastOffsets.set(j.bone, prev ? q.clone().multiply(prev) : q.clone());
     }
+
+    // Small secondary motion gives the rig weight while the authored idle loops.
+    // These offsets are removed before the next animation tick, like impact jolts.
+    const breathe = Math.sin(this.elapsed * Math.PI * 0.72);
+    const sway = Math.sin(this.elapsed * 0.63 + 0.7);
+    const addIdleOffset = (bone, axis, amount) => {
+      if (!bone) return;
+      q.setFromAxisAngle(axis, amount);
+      bone.quaternion.premultiply(q);
+      const prev = this.lastOffsets.get(bone);
+      this.lastOffsets.set(bone, prev ? q.clone().multiply(prev) : q.clone());
+    };
+    addIdleOffset(this.bone('Abdomen'), new THREE.Vector3(1, 0, 0), breathe * 0.012);
+    addIdleOffset(this.bone('Torso'), new THREE.Vector3(0, 0, 1), sway * 0.008);
+    addIdleOffset(this.bone('Head'), new THREE.Vector3(0, 1, 0), sway * 0.018);
+    addIdleOffset(this.bone('UpperArm.L'), new THREE.Vector3(1, 0, 0), breathe * 0.006);
+    addIdleOffset(this.bone('UpperArm.R'), new THREE.Vector3(1, 0, 0), -breathe * 0.006);
 
     // face: surprised on impact, then angry for a bit
     this.angryTimer = Math.max(0, this.angryTimer - dt);

@@ -22,8 +22,8 @@ export class Mouth {
     const box = eyes ? new THREE.Box3().setFromObject(head, true) : null;
     const size = box?.getSize(new THREE.Vector3());
     const localToWorld = eyes ? 1 : Math.max(head.getWorldScale(new THREE.Vector3()).x, 0.001);
-    const w = eyes ? size.x * 0.32 : 0.24 / localToWorld;
-    const h = eyes ? size.y * 0.14 : 0.08 / localToWorld;
+    const w = eyes ? size.x * 0.32 : 0.19 / localToWorld;
+    const h = eyes ? size.y * 0.14 : 0.045 / localToWorld;
 
     const shape = new THREE.Shape();
     const r = h * 0.45;
@@ -39,7 +39,9 @@ export class Mouth {
 
     this.mesh = new THREE.Mesh(
       new THREE.ShapeGeometry(shape),
-      new THREE.MeshBasicMaterial({ color: 0x55e6ff, toneMapped: false }),
+      eyes
+        ? new THREE.MeshBasicMaterial({ color: 0x55e6ff, toneMapped: false })
+        : new THREE.MeshStandardMaterial({ color: 0x482d31, roughness: 0.95, side: THREE.DoubleSide }),
     );
     // Find the face surface by casting a ray at the head from the front.
     if (eyes) {

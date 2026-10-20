@@ -5,7 +5,7 @@ import { Thrower } from './projectiles.js';
 import { sfx } from './sfx.js';
 import { Listener, Speaker, Sentences, ask, resetBrain } from './voice.js';
 
-// Cesium Man, an animated human sample from Khronos glTF Sample Assets (CC BY 4.0).
+// Animated human from the local glTF sample assets.
 const MODEL_URL = '/models/human.glb';
 
 const status = document.getElementById('status');
@@ -45,6 +45,7 @@ const LINES = {
     'Wow. Bold of you to walk in here looking like that.',
   ],
   stone: ['Ow! That was a priceless antique. Me. I am the antique.', 'That did not hurt. The dent is decorative.', 'Violence? In this economy?'],
+  stoneRepeat: ['Again? I am starting to see a pattern. And stars.', 'All right, I have learned my lesson. What was it?', 'My warranty specifically excludes this.'],
   tomato: ['A tomato? I was wearing that shirt.', 'Great. Now I smell like a salad.'],
   paint: ['Interesting color. Wrong, but interesting.', 'Oh look, you made art. On me. Without asking.'],
   egg: ['Rotten? Like your aim.', 'I will remember that. I remember everything.'],
@@ -167,10 +168,11 @@ loadCharacter(MODEL_URL, (p) => {
   const NAMES = { stone: 'a stone', tomato: 'a tomato', paint: 'a paint balloon', egg: 'a rotten egg', pie: 'a cream pie' };
   thrower = new Thrower(scene, camera, c);
   thrower.on.hit = (kind) => {
+    const repeated = c.hitStreak >= 2;
     hitStop = kind === 'stone' ? 0.08 : 0.05;
-    shake = kind === 'stone' ? 0.12 : 0.06;
+    shake = (kind === 'stone' ? 0.12 : 0.06) * Math.min(1.8, 1 + (c.hitStreak - 1) * 0.16);
     notes.push(`[the visitor threw ${NAMES[kind]} at you and hit you]`);
-    say(pick(LINES[kind]));
+    say(kind === 'stone' && repeated ? pick(LINES.stoneRepeat) : pick(LINES[kind]));
   };
   thrower.on.miss = (kind) => {
     notes.push(`[the visitor threw ${NAMES[kind]} at you and missed]`);

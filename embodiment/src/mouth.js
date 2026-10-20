@@ -57,6 +57,7 @@ export class Mouth {
 
     this.timeline = null; // scripted visemes for text speech
     this.mic = null;      // live analyser for mic lip-sync
+    this.voice = null;    // analyser on the robot's own speech
   }
 
   // --- text-driven: approximate visemes from the letters, ~75 ms per letter ---
@@ -88,9 +89,18 @@ export class Mouth {
     this.mic = null;
   }
 
+  // --- voice-driven: same analysis, on the robot's own speech audio ---
+  follow(ctx, analyser) {
+    if (this.voice?.analyser === analyser) return;
+    this.voice = { ctx, analyser, buf: new Uint8Array(analyser.frequencyBinCount), level: 0 };
+  }
+
+  unfollow() { this.voice = null; }
+
   update(dt) {
-    if (this.mic) {
-      const { analyser, buf, ctx } = this.mic;
+    const audio = this.mic ?? (this.timeline ? null : this.voice);
+    if (audio) {
+      const { analyser, buf, ctx } = audio;
       analyser.getByteFrequencyData(buf);
       const hz = ctx.sampleRate / analyser.fftSize;
       let low = 0, high = 0;
@@ -100,9 +110,9 @@ export class Mouth {
         else if (f >= 1000 && f < 4000) high += buf[i];
       }
       const level = Math.min(1, Math.max(0, (low + high) / 9000 - 0.15));
-      this.mic.level += (level - this.mic.level) * 0.5;
+      audio.level += (level - audio.level) * 0.5;
       const bright = high / (low + high + 1);
-      this.target = [0.6 + bright * 0.9, Math.max(0.08, this.mic.level)];
+      this.target = [0.6 + bright * 0.9, Math.max(0.08, audio.level)];
     } else if (this.timeline) {
       const now = performance.now();
       if (now > this.timelineEnd) {

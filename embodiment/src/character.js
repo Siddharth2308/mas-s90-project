@@ -117,6 +117,11 @@ class Character {
     if (kind !== 'stone' && Math.random() < 0.5) this.playOnce('No');
   }
 
+  // Eye-roll while he "thinks" about your question.
+  annoyed(t = 1.5) {
+    this.angryTimer = Math.max(this.angryTimer, t);
+  }
+
   startEvict() {
     if (this.evict) return false;
     if (this.oneShot) { this.oneShot.stop(); this.oneShot = null; this.idle.reset().play(); }

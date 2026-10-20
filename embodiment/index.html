@@ -11,14 +11,23 @@
       #controls button { font: 13px sans-serif; padding: 6px 12px; background: #222; color: #ddd; border: 1px solid #444; border-radius: 6px; cursor: pointer; }
       #controls button:hover { background: #333; }
       #controls .evict { border-color: #a35; color: #fbc; }
-      #caption { position: fixed; left: 0; right: 0; top: 16px; text-align: center; color: #bbb; font: 16px sans-serif; }
-      body.booth #controls, body.booth #status, body.booth #caption { display: none; }
+      #controls .talk { border-color: #3a8; color: #bfe; }
+      #controls .talk.on { background: #164; }
+      #controls input { font: 13px sans-serif; padding: 6px 10px; background: #111; color: #ddd; border: 1px solid #444; border-radius: 6px; width: 220px; }
+      #caption { position: fixed; left: 0; right: 0; top: 16px; padding: 0 16px; text-align: center; color: #bbb; font: 16px sans-serif; }
+      #caption.heard { color: #7c9; font-style: italic; }
+      #brain { position: fixed; left: 12px; top: 12px; color: #6a8; font: 12px monospace; }
+      body.booth #controls, body.booth #status, body.booth #caption, body.booth #brain { display: none; }
     </style>
   </head>
   <body>
     <div id="caption"></div>
+    <div id="brain"></div>
     <div id="status">Loading character…</div>
     <div id="controls">
+      <button id="ptt" class="talk">🎤 Hold to talk (Space)</button>
+      <input id="ask" placeholder="…or type and press Enter" autocomplete="off" />
+      <button id="visitor">New visitor (N)</button>
       <button data-act="stone">🪨 Stone</button>
       <button data-act="tomato">🍅 Tomato</button>
       <button data-act="paint">🎨 Paint</button>

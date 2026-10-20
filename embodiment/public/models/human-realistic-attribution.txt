@@ -1,0 +1,4 @@
+Human model: mh_1037, adapted from MakeHuman assets via the char-kit project.
+Source: https://github.com/MMWilliams/char-kit
+The mesh and embedded materials are MakeHuman assets released under CC0, as described by char-kit.
+The source GLB's third-party motion clips were removed; no animation data is included in this file.

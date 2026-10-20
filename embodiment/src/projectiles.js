@@ -38,6 +38,7 @@ export class Thrower {
     const spread = part === 'Head' ? [2.2, 1.2] : [1.2, 1.0]; // aim somewhere on the part, not dead center
     const target = this.character.partCenter(part).add(
       new THREE.Vector3((Math.random() - 0.5) * spread[0], (Math.random() - 0.5) * spread[1], 0));
+    const aimX = target.x;
     const willMiss = Math.random() < 0.12;
     if (willMiss) target.x += (Math.random() < 0.5 ? -1 : 1) * 2.4;
 
@@ -49,6 +50,9 @@ export class Thrower {
     this.scene.add(mesh);
     this.flying.push({
       kind, color, mesh, vel, age: 0, hit: false,
+      dodgeAt: !willMiss && Math.random() < 0.38 ? 0.16 + Math.random() * 0.1 : Infinity,
+      dodgeSide: aimX < this.character.partCenter('Torso').x ? 1 : -1,
+      dodgeAttempted: false,
       spin: new THREE.Vector3(Math.random() * 10, Math.random() * 10, Math.random() * 10),
     });
     sfx.whoosh();
@@ -60,6 +64,10 @@ export class Thrower {
 
     for (const p of this.flying) {
       p.age += dt;
+      if (!p.dodgeAttempted && p.age >= p.dodgeAt) {
+        p.dodgeAttempted = true;
+        this.character.tryDodge(p.dodgeSide);
+      }
       prev.copy(p.mesh.position);
       p.vel.y += GRAVITY * dt;
       p.mesh.position.addScaledVector(p.vel, dt);

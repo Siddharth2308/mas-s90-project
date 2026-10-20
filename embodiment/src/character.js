@@ -72,6 +72,9 @@ class Character {
     this.elapsed = 0;
     this.hitStreak = 0;
     this.hitAge = Infinity;
+    this.dodge = null;
+    this.dodgeCooldown = 0;
+    this.baseX = this.root.position.x;
     this.evict = null;     // eviction sequence state
     this.on = {};          // callbacks: launch, land
 
@@ -83,15 +86,15 @@ class Character {
   bone(name) {
     const aliases = {
       Head: ['Head', 'head', 'Skeleton_neck_joint_2', 'Skeleton_neck_joint_1'],
-      Neck: ['Neck', 'neck', 'Skeleton_neck_joint_2', 'Skeleton_neck_joint_1'],
-      Torso: ['Torso', 'torso', 'Spine2', 'Spine1', 'Spine', 'Skeleton_torso_joint_2', 'Skeleton_torso_joint_1'],
-      Abdomen: ['Abdomen', 'Hips', 'Spine', 'Skeleton_torso_joint_1', 'Skeleton_torso_joint_2'],
-      'UpperArm.L': ['UpperArm.L', 'LeftArm', 'Skeleton_arm_joint_L__4_', 'Skeleton_arm_joint_L__3_'],
-      'UpperArm.R': ['UpperArm.R', 'RightArm', 'Skeleton_arm_joint_R', 'Skeleton_arm_joint_R__2_'],
-      'LowerArm.L': ['LowerArm.L', 'LeftForeArm', 'Skeleton_arm_joint_L__3_', 'Skeleton_arm_joint_L__2_'],
-      'LowerArm.R': ['LowerArm.R', 'RightForeArm', 'Skeleton_arm_joint_R__2_', 'Skeleton_arm_joint_R__3_'],
-      'UpperLeg.L': ['UpperLeg.L', 'LeftUpLeg', 'LeftLeg'],
-      'UpperLeg.R': ['UpperLeg.R', 'RightUpLeg', 'RightLeg'],
+      Neck: ['Neck', 'neck', 'neck_01', 'Skeleton_neck_joint_2', 'Skeleton_neck_joint_1'],
+      Torso: ['Torso', 'torso', 'spine_03', 'spine_01', 'Spine2', 'Spine1', 'Spine', 'Skeleton_torso_joint_2', 'Skeleton_torso_joint_1'],
+      Abdomen: ['Abdomen', 'pelvis', 'Hips', 'Spine', 'Skeleton_torso_joint_1', 'Skeleton_torso_joint_2'],
+      'UpperArm.L': ['UpperArm.L', 'upperarm_l', 'LeftArm', 'Skeleton_arm_joint_L__4_', 'Skeleton_arm_joint_L__3_'],
+      'UpperArm.R': ['UpperArm.R', 'upperarm_r', 'RightArm', 'Skeleton_arm_joint_R', 'Skeleton_arm_joint_R__2_'],
+      'LowerArm.L': ['LowerArm.L', 'lowerarm_l', 'LeftForeArm', 'Skeleton_arm_joint_L__3_', 'Skeleton_arm_joint_L__2_'],
+      'LowerArm.R': ['LowerArm.R', 'lowerarm_r', 'RightForeArm', 'Skeleton_arm_joint_R__2_', 'Skeleton_arm_joint_R__3_'],
+      'UpperLeg.L': ['UpperLeg.L', 'thigh_l', 'LeftUpLeg', 'LeftLeg'],
+      'UpperLeg.R': ['UpperLeg.R', 'thigh_r', 'RightUpLeg', 'RightLeg'],
     };
     for (const k of aliases[name] ?? [name.replace(/\./g, '')]) if (this.bones[k]) return this.bones[k];
     return Object.values(this.bones)[0];
@@ -162,6 +165,20 @@ class Character {
     this.angryTimer = 1.8 + Math.min(1, (this.hitStreak - 1) * 0.2);
     if (this.hitStreak >= 3) this.playOnce('No');
     else if (kind !== 'stone' && Math.random() < 0.5) this.playOnce('No');
+  }
+
+  tryDodge(side) {
+    if (this.evict || this.dodge || this.dodgeCooldown > 0) return false;
+    this.dodge = { side: side < 0 ? -1 : 1, t: 0 };
+    this.dodgeCooldown = 1.15;
+    const torso = this.bone('Torso');
+    const head = this.bone('Head');
+    const arm = this.bone(side < 0 ? 'UpperArm.L' : 'UpperArm.R');
+    const axis = new THREE.Vector3(0, 0, 1);
+    if (torso) this.jolts.push({ bone: torso, axis, amp: 0.12, t: 0 });
+    if (head) this.jolts.push({ bone: head, axis: axis.clone().negate(), amp: 0.07, t: 0 });
+    if (arm) this.jolts.push({ bone: arm, axis: new THREE.Vector3(1, 0, 0), amp: 0.12, t: 0 });
+    return true;
   }
 
   // Eye-roll while he "thinks" about your question.
@@ -276,6 +293,8 @@ class Character {
   update(dt) {
     this.elapsed += dt;
     this.hitAge += dt;
+    this.dodgeCooldown = Math.max(0, this.dodgeCooldown - dt);
+    this.updateDodge(dt);
     if (this.hitAge > 1.4) this.hitStreak = 0;
     // undo last frame's jolt offsets (for bones the animation doesn't overwrite)
     for (const [bone, q] of this.lastOffsets) bone.quaternion.premultiply(q.invert());
@@ -325,5 +344,32 @@ class Character {
     }
 
     this.mouth.update(dt);
+  }
+
+  updateDodge(dt) {
+    if (this.evict) {
+      this.root.position.x = this.baseX;
+      this.dodge = null;
+      return;
+    }
+    if (!this.dodge) return;
+    const d = this.dodge;
+    d.t += dt;
+    const out = 0.22, hold = 0.16, back = 0.34;
+    const distance = 0.48;
+    let offset;
+    if (d.t < out) {
+      const k = d.t / out;
+      offset = distance * (k * k * (3 - 2 * k));
+    } else if (d.t < out + hold) {
+      offset = distance;
+    } else if (d.t < out + hold + back) {
+      const k = (d.t - out - hold) / back;
+      offset = distance * (1 - k * k * (3 - 2 * k));
+    } else {
+      offset = 0;
+      this.dodge = null;
+    }
+    this.root.position.x = this.baseX + d.side * offset;
   }
 }

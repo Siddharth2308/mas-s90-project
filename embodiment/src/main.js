@@ -6,7 +6,7 @@ import { sfx } from './sfx.js';
 import { Listener, Speaker, Sentences, ask, resetBrain } from './voice.js';
 
 // Animated human from the local glTF sample assets.
-const MODEL_URL = '/models/human.glb';
+const MODEL_URL = '/models/human-realistic.glb';
 
 const status = document.getElementById('status');
 const caption = document.getElementById('caption');
@@ -15,6 +15,8 @@ const caption = document.getElementById('caption');
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -29,11 +31,11 @@ controls.target.set(0, 2.4, 0);
 controls.update();
 
 // --- lights: soft key light + a colored rim from behind ---
-scene.add(new THREE.HemisphereLight(0xffffff, 0x222233, 1.2));
-const key = new THREE.DirectionalLight(0xffffff, 2.0);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x222233, 1.0));
+const key = new THREE.DirectionalLight(0xfff4eb, 1.7);
 key.position.set(3, 6, 6);
 scene.add(key);
-const rim = new THREE.DirectionalLight(0x66ccff, 2.5);
+const rim = new THREE.DirectionalLight(0x9ab6d0, 1.1);
 rim.position.set(-4, 5, -6);
 scene.add(rim);
 

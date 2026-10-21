@@ -5,14 +5,14 @@ import { Mouth } from './mouth.js';
 // Layer 1 = visual effects (mouth, splats, particles...). Rendered, but ignored by hit tests.
 export const FX_LAYER = 1;
 
-export function loadCharacter(url, onProgress) {
+export function loadCharacter(url, onProgress, { applyRelaxPose = true } = {}) {
   return new Promise((resolve, reject) => {
-    new GLTFLoader().load(url, (gltf) => resolve(new Character(gltf)), onProgress, reject);
+    new GLTFLoader().load(url, (gltf) => resolve(new Character(gltf, { applyRelaxPose })), onProgress, reject);
   });
 }
 
 class Character {
-  constructor(gltf) {
+  constructor(gltf, { applyRelaxPose = true } = {}) {
     this.root = gltf.scene;
     this.bones = {};
     this.root.traverse((o) => { if (o.isBone) this.bones[o.name] = o; });
@@ -41,7 +41,7 @@ class Character {
     head ??= this.bone('Head') ?? this.bone('Neck') ?? this.root;
     this.head = head;
 
-    // Face morphs: Angry / Surprised / Sad (+ Smug / Blink and visemes on the human).
+    // Facial morphs exported from human-realistic-expressions.blend.
     this.faceMeshes = [];
     this.root.traverse((o) => {
       if (o.isMesh && o.morphTargetDictionary) this.faceMeshes.push(o);
@@ -50,9 +50,11 @@ class Character {
     });
     this.mouth = new Mouth(head, eyes, this.faceMeshes);
     this.mouth.mesh.layers.set(FX_LAYER);
-    this.face = { Angry: 0, Surprised: 0, Sad: 0, Smug: 0, Blink: 0 };
-    this.faceTarget = { Angry: 0, Surprised: 0, Sad: 0, Smug: 0 };
+    this.face = { Smile: 0, Angry: 0, Smirk: 0, Sad: 0, Blink: 0 };
+    this.faceTarget = { Smile: 0, Angry: 0, Smirk: 0, Sad: 0 };
     this.angryTimer = 0;
+    this.smugTimer = 0;
+    this.expressionWait = 4 + Math.random() * 6;
     this.blinkIn = 2 + Math.random() * 3;
     this.blinkT = -1;
 
@@ -63,7 +65,7 @@ class Character {
     this.idle = Object.entries(this.actions).find(([name]) => name.toLowerCase().includes('idle'))?.[1]
       ?? Object.values(this.actions)[0];
     if (this.idle) this.idle.setEffectiveTimeScale(0.72).play();
-    else this.relaxPose();
+    else if (applyRelaxPose) this.relaxPose();
     this.oneShot = null;
     this.mixer.addEventListener('finished', (e) => {
       if (e.action !== this.oneShot) return;
@@ -182,7 +184,7 @@ class Character {
       if (leg) this.jolts.push({ bone: leg, axis: new THREE.Vector3(1, 0, 0), amp: 0.07 * force, t: 0 });
     }
 
-    this.face.Surprised = 1;
+    this.smugTimer = 0;
     this.angryTimer = 1.8 + Math.min(1, (this.hitStreak - 1) * 0.2);
     if (this.hitStreak >= 3) this.playOnce('No');
     else if (kind !== 'stone' && Math.random() < 0.5) this.playOnce('No');
@@ -207,11 +209,16 @@ class Character {
     this.angryTimer = Math.max(this.angryTimer, t);
   }
 
+  missed() {
+    if (this.evict) return;
+    this.smugTimer = 1.5;
+  }
+
   startEvict() {
     if (this.evict) return false;
     if (this.oneShot) { this.oneShot.stop(); this.oneShot = null; this.idle?.reset().play(); }
     this.evict = { phase: 'crouch', t: 0, vy: 0, spin: 0 };
-    this.face.Surprised = 1;
+    this.angryTimer = Math.max(this.angryTimer, 0.8);
     return true;
   }
 
@@ -284,7 +291,6 @@ class Character {
         r.position.y = 0;
         e.phase = 'land'; e.t = 0;
         this.jolts.push({ bone: this.bone('Torso') ?? this.root, axis: new THREE.Vector3(1, 0, 0), amp: 0.25, t: 0 });
-        this.face.Surprised = 1;
         this.angryTimer = 2;
         this.on.land?.();
       }
@@ -354,13 +360,23 @@ class Character {
     addIdleOffset(this.bone('UpperArm.L'), new THREE.Vector3(1, 0, 0), breathe * 0.006);
     addIdleOffset(this.bone('UpperArm.R'), new THREE.Vector3(1, 0, 0), -breathe * 0.006);
 
-    // face: surprised on impact, then angry for a bit
+    // Blend the authored expressions for a short reaction, then return to neutral.
     this.angryTimer = Math.max(0, this.angryTimer - dt);
+    this.smugTimer = Math.max(0, this.smugTimer - dt);
+    this.expressionWait -= dt;
+    if (this.expressionWait <= 0) {
+      if (!this.evict && this.angryTimer <= 0 && this.smugTimer <= 0) {
+        if (Math.random() < 0.45) this.angryTimer = 0.6 + Math.random() * 0.7;
+        else this.smugTimer = 0.8 + Math.random() * 0.9;
+      }
+      this.expressionWait = 4 + Math.random() * 8;
+    }
     this.faceTarget.Angry = this.angryTimer > 0 ? 0.9 : 0;
-    this.faceTarget.Smug = this.angryTimer > 0 ? 0 : 0.35; // resting smirk
-    this.face.Surprised = Math.max(0, this.face.Surprised - dt * 2.5);
+    this.faceTarget.Smirk = this.smugTimer > 0 && this.angryTimer <= 0 ? 0.9 : 0;
     this.face.Angry += (this.faceTarget.Angry - this.face.Angry) * Math.min(1, dt * 6);
-    this.face.Smug += (this.faceTarget.Smug - this.face.Smug) * Math.min(1, dt * 3);
+    this.face.Smirk += (this.faceTarget.Smirk - this.face.Smirk) * Math.min(1, dt * 6);
+    this.face.Smile += (this.faceTarget.Smile - this.face.Smile) * Math.min(1, dt * 6);
+    this.face.Sad += (this.faceTarget.Sad - this.face.Sad) * Math.min(1, dt * 6);
 
     // blink every few seconds (0.16 s close-open)
     this.blinkIn -= dt;

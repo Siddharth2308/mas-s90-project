@@ -5,11 +5,12 @@ import { Thrower } from './projectiles.js';
 import { sfx } from './sfx.js';
 import { Listener, Speaker, Sentences, ask, resetBrain } from './voice.js';
 
-// Pie: MPFB human built by blender/make_human.py, exported by blender/export_human.py.
-const MODEL_URL = '/models/pie.glb';
+// The expression model authored in human-realistic-expressions.blend, exported as glTF.
+const MODEL_URL = '/models/human-realistic-expressions.glb';
 
 const status = document.getElementById('status');
 const caption = document.getElementById('caption');
+const pieBtn = document.getElementById('pie-btn');
 
 // --- renderer / scene / camera ---
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -144,6 +145,7 @@ function newVisitor() {
   convId++;
   speaker?.stop();
   thrower?.clearStickers();
+  thrower?.resetPies();
   caption.textContent = '';
   brainStatus.textContent = 'new visitor, fresh brain';
 }
@@ -155,7 +157,7 @@ let shake = 0;
 // --- character ---
 loadCharacter(MODEL_URL, (p) => {
   if (p.total) status.textContent = `Loading character… ${Math.round((p.loaded / p.total) * 100)}%`;
-}).then((c) => {
+}, { applyRelaxPose: false }).then((c) => {
   character = c;
   scene.add(c.root, c.stars);
 
@@ -165,6 +167,13 @@ loadCharacter(MODEL_URL, (p) => {
 
   const NAMES = { pie: 'a pie' };
   thrower = new Thrower(scene, camera, c);
+  thrower.on.ammo = (pies, maxPies, cooldown, recharge) => {
+    pieBtn.disabled = cooldown > 0 || pies === 0;
+    if (cooldown > 0) pieBtn.textContent = `🥧 Pie (${pies}/${maxPies}) · ${Math.ceil(cooldown)}s`;
+    else if (pies === 0) pieBtn.textContent = `🥧 Refilling · ${Math.ceil(recharge)}s`;
+    else pieBtn.textContent = `🥧 Throw pie (${pies}/${maxPies}) (1)`;
+  };
+  thrower.refreshAmmo();
   thrower.on.hit = (kind) => {
     const repeated = c.hitStreak >= 2;
     hitStop = 0.05;
@@ -173,6 +182,7 @@ loadCharacter(MODEL_URL, (p) => {
     say(repeated ? pick(LINES.pieRepeat) : pick(LINES.pie));
   };
   thrower.on.miss = (kind) => {
+    c.missed();
     notes.push(`[the visitor threw ${NAMES[kind]} at you and missed]`);
     if (Math.random() < 0.6) say(pick(LINES.miss));
   };

@@ -3,6 +3,9 @@ import { FX_LAYER } from './character.js';
 import { sfx } from './sfx.js';
 
 const GRAVITY = -14;
+const PIE_CAPACITY = 3;
+const PIE_THROW_COOLDOWN = 1.4;
+const PIE_RECHARGE_TIME = 4;
 const PAINT_COLORS = ['#ff3da5', '#3dff7a', '#ffe23d', '#3da0ff', '#b03dff', '#ff7a1a'];
 
 // What each throwable looks like, what it leaves behind, and how big the mark is.
@@ -11,7 +14,7 @@ const KINDS = {
   tomato: { soft: true,  mark: () => splatTexture('#d4180f'), size: 0.95, target: 'any' },
   paint:  { soft: true,  mark: (c) => splatTexture(c),        size: 1.2,  target: 'any' },
   egg:    { soft: true,  mark: () => splatTexture('#c9c23a', '#fff6c8'), size: 0.9, target: 'any' },
-  pie:    { soft: true,  mark: () => splatTexture('#fffaf0', '#ffe9b8'), size: 1.5, target: 'head' },
+  pie:    { soft: true,  mark: () => creamSplatTexture(), size: 1.0, target: 'abdomen' },
 };
 
 export class Thrower {
@@ -23,21 +26,30 @@ export class Thrower {
     this.particles = [];
     this.stickers = [];
     this.raycaster = new THREE.Raycaster(); // only sees layer 0 = the character's body
+    this.pies = PIE_CAPACITY;
+    this.throwCooldown = 0;
+    this.rechargeTimer = 0;
+    this.ammoState = '';
     this.on = {}; // callbacks: hit(kind, point), miss(kind)
   }
 
   throw(kind) {
     // Keep one throwable available: the cream pie.
     if (kind !== 'pie') return;
+    if (this.throwCooldown > 0 || this.pies < 1) return false;
+    this.pies--;
+    this.throwCooldown = PIE_THROW_COOLDOWN;
+    if (this.pies < PIE_CAPACITY && this.rechargeTimer <= 0) this.rechargeTimer = PIE_RECHARGE_TIME;
+    this.notifyAmmo();
     const spec = KINDS[kind];
     const color = kind === 'paint' ? PAINT_COLORS[Math.floor(Math.random() * PAINT_COLORS.length)] : null;
     const mesh = makeProjectile(kind, color);
     mesh.traverse((o) => o.layers.set(FX_LAYER));
 
-    // launch from just below the camera, toward the head or torso
+    // Launch toward the lower torso, well below the face.
     const start = this.camera.position.clone().add(new THREE.Vector3((Math.random() - 0.5) * 3, -2.5, -2));
-    const part = spec.target === 'head' || Math.random() < 0.5 ? 'Head' : 'Torso';
-    const spread = part === 'Head' ? [2.2, 1.2] : [1.2, 1.0]; // aim somewhere on the part, not dead center
+    const part = spec.target === 'abdomen' ? 'Abdomen' : 'Torso';
+    const spread = [0.7, 0.55];
     const target = this.character.partCenter(part).add(
       new THREE.Vector3((Math.random() - 0.5) * spread[0], (Math.random() - 0.5) * spread[1], 0));
     const aimX = target.x;
@@ -58,9 +70,38 @@ export class Thrower {
       spin: new THREE.Vector3(Math.random() * 10, Math.random() * 10, Math.random() * 10),
     });
     sfx.whoosh();
+    return true;
+  }
+
+  resetPies() {
+    this.pies = PIE_CAPACITY;
+    this.throwCooldown = 0;
+    this.rechargeTimer = 0;
+    this.notifyAmmo(true);
+  }
+
+  refreshAmmo() { this.notifyAmmo(true); }
+
+  notifyAmmo(force = false) {
+    const cooldown = Math.ceil(this.throwCooldown);
+    const recharge = Math.ceil(this.rechargeTimer);
+    const state = `${this.pies}:${cooldown}:${recharge}`;
+    if (!force && state === this.ammoState) return;
+    this.ammoState = state;
+    this.on.ammo?.(this.pies, PIE_CAPACITY, this.throwCooldown, this.rechargeTimer);
   }
 
   update(dt) {
+    this.throwCooldown = Math.max(0, this.throwCooldown - dt);
+    if (this.pies < PIE_CAPACITY) {
+      this.rechargeTimer -= dt;
+      if (this.rechargeTimer <= 0) {
+        this.pies++;
+        this.rechargeTimer = this.pies < PIE_CAPACITY ? PIE_RECHARGE_TIME : 0;
+      }
+    }
+    this.notifyAmmo();
+
     const prev = new THREE.Vector3();
     const dir = new THREE.Vector3();
 
@@ -153,7 +194,7 @@ export class Thrower {
     const tex = spec.mark(p.color);
     const mat = new THREE.MeshStandardMaterial({
       map: tex, transparent: true, depthWrite: false, roughness: 0.3,
-      emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: spec.soft ? 0.2 : 0,
+      emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0,
       polygonOffset: true, polygonOffsetFactor: -4,
     });
     const s = spec.size * (0.85 + Math.random() * 0.3);
@@ -171,6 +212,10 @@ export class Thrower {
       sticker.userData.baseOpacity = 0.72;
       sticker.userData.fadeStart = performance.now() + 3500;
       sticker.userData.fadeDuration = 10000;
+    } else if (p.kind === 'pie') {
+      sticker.userData.baseOpacity = 1;
+      sticker.userData.fadeStart = performance.now() + 5000;
+      sticker.userData.fadeDuration = 3500;
     }
     this.stickers.push(sticker);
   }
@@ -271,6 +316,66 @@ function splatTexture(color, highlight = '#ffffff') {
     ctx.globalAlpha = 0.5;                        // wet highlight
     ctx.fillStyle = highlight;
     blob(110, 100, 12);
+  });
+}
+
+function creamSplatTexture() {
+  return canvasTexture((ctx) => {
+    const blob = (x, y, r) => { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); };
+    const cream = ctx.createRadialGradient(112, 88, 12, 128, 128, 115);
+    cream.addColorStop(0, '#fffdf5');
+    cream.addColorStop(0.58, '#fff8e5');
+    cream.addColorStop(0.86, '#f2dfb7');
+    cream.addColorStop(1, 'rgba(206,177,132,0)');
+    ctx.fillStyle = cream;
+
+    // Uneven lobes make the cream edge look soft and freshly smashed.
+    ctx.beginPath();
+    for (let i = 0; i <= 40; i++) {
+      const a = i / 40 * Math.PI * 2;
+      const r = 65 + Math.sin(a * 5 + 0.4) * 9 + Math.sin(a * 9) * 5;
+      const x = 128 + Math.cos(a) * r;
+      const y = 112 + Math.sin(a) * r * 0.72;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    // Cream folds and soft highlights add depth without a glowing look.
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = '#e9d4a8';
+    for (let i = 0; i < 7; i++) {
+      const a = Math.random() * Math.PI * 2;
+      blob(128 + Math.cos(a) * (35 + Math.random() * 37), 112 + Math.sin(a) * (24 + Math.random() * 29), 7 + Math.random() * 13);
+    }
+    ctx.globalAlpha = 0.62;
+    ctx.fillStyle = '#ffffff';
+    blob(105, 83, 17);
+    blob(145, 101, 9);
+
+    // Gravity pulls cream drips and droplets down from the impact.
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = '#fff8e8';
+    for (let i = 0; i < 4; i++) {
+      const x = 86 + i * 27 + (Math.random() - 0.5) * 12;
+      const y = 151 + Math.random() * 13;
+      const length = 24 + Math.random() * 46;
+      const width = 7 + Math.random() * 7;
+      ctx.beginPath();
+      ctx.moveTo(x - width / 2, y);
+      ctx.quadraticCurveTo(x - width / 2, y + length * 0.72, x, y + length);
+      ctx.quadraticCurveTo(x + width / 2, y + length * 0.72, x + width / 2, y);
+      ctx.closePath();
+      ctx.fill();
+      blob(x, y + length, width * 0.53);
+    }
+    ctx.globalAlpha = 0.75;
+    for (let i = 0; i < 13; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = 78 + Math.random() * 39;
+      blob(128 + Math.cos(a) * d, 112 + Math.sin(a) * d * 0.72, 2 + Math.random() * 4);
+    }
+    ctx.globalAlpha = 1;
   });
 }
 

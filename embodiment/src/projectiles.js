@@ -45,12 +45,12 @@ export class Thrower {
     const mesh = makeProjectile(kind, color);
     mesh.traverse((o) => o.layers.set(FX_LAYER));
 
-    // Launch toward the lower torso, well below the face.
+    // Vary impacts from the chest down through the lower torso and just below it.
     const start = this.camera.position.clone().add(new THREE.Vector3((Math.random() - 0.5) * 3, -2.5, -2));
-    const part = spec.target === 'abdomen' ? 'Abdomen' : 'Torso';
-    const spread = [0.7, 0.55];
-    const target = this.character.partCenter(part).add(
-      new THREE.Vector3((Math.random() - 0.5) * spread[0], (Math.random() - 0.5) * spread[1], 0));
+    const chest = this.character.partCenter('Torso');
+    const lowerTorso = this.character.partCenter('Abdomen');
+    const target = chest.lerp(lowerTorso, 0.1 + Math.random() * 1.05).add(
+      new THREE.Vector3((Math.random() - 0.5) * 0.7, (Math.random() - 0.5) * 0.5, 0));
     const aimX = target.x;
     const willMiss = Math.random() < 0.12;
     if (willMiss) target.x += (Math.random() < 0.5 ? -1 : 1) * 2.4;

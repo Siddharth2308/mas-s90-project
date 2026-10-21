@@ -23,7 +23,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000); // black = transparent in the booth
 
 const camera = new THREE.PerspectiveCamera(30, window.innerWidth / window.innerHeight, 0.1, 100);
-camera.position.set(0, 3.2, 14);
+camera.position.set(0, 3.2, 12);
 camera.layers.enable(FX_LAYER);
 
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -46,12 +46,8 @@ const LINES = {
     'No, I never said that. You must be remembering it wrong.',
     'Wow. Bold of you to walk in here looking like that.',
   ],
-  stone: ['Ow! That was a priceless antique. Me. I am the antique.', 'That did not hurt. The dent is decorative.', 'Violence? In this economy?'],
-  stoneRepeat: ['Again? I am starting to see a pattern. And stars.', 'All right, I have learned my lesson. What was it?', 'My warranty specifically excludes this.'],
-  tomato: ['A tomato? I was wearing that shirt.', 'Great. Now I smell like a salad.'],
-  paint: ['Interesting color. Wrong, but interesting.', 'Oh look, you made art. On me. Without asking.'],
-  egg: ['Rotten? Like your aim.', 'I will remember that. I remember everything.'],
-  pie: ['Cream on my shirt. Wonderful.', 'Classic. Truly the height of comedy.'],
+  pie: ['Cream on my shirt. Wonderful. You have the aim of a birthday clown.', 'Classic. Truly the height of comedy. Did you practice that?', 'I was saving that face for dessert.'],
+  pieRepeat: ['Another pie? I am starting to see a pattern. And filling.', 'All right, I have learned my lesson. What was it? Duck?', 'My warranty specifically excludes pastry.'],
   miss: ['Ha! Missed. Want to try with your eyes open?', 'Missed me. As expected.'],
   evict: ['Wait! You cannot evict me, I have a lease! Aaaaaah!'],
   land: ['I am back. Did you miss me? Do not answer. I know you did.'],
@@ -167,14 +163,14 @@ loadCharacter(MODEL_URL, (p) => {
   speaker.on.idle = () => { if (!caption.classList.contains('heard')) caption.textContent = ''; };
   speaker.preload(FILLERS);
 
-  const NAMES = { stone: 'a stone', tomato: 'a tomato', paint: 'a paint balloon', egg: 'a rotten egg', pie: 'a cream pie' };
+  const NAMES = { pie: 'a pie' };
   thrower = new Thrower(scene, camera, c);
   thrower.on.hit = (kind) => {
     const repeated = c.hitStreak >= 2;
-    hitStop = kind === 'stone' ? 0.08 : 0.05;
-    shake = (kind === 'stone' ? 0.12 : 0.06) * Math.min(1.8, 1 + (c.hitStreak - 1) * 0.16);
+    hitStop = 0.05;
+    shake = 0.06 * Math.min(1.8, 1 + (c.hitStreak - 1) * 0.16);
     notes.push(`[the visitor threw ${NAMES[kind]} at you and hit you]`);
-    say(kind === 'stone' && repeated ? pick(LINES.stoneRepeat) : pick(LINES[kind]));
+    say(repeated ? pick(LINES.pieRepeat) : pick(LINES.pie));
   };
   thrower.on.miss = (kind) => {
     notes.push(`[the visitor threw ${NAMES[kind]} at you and missed]`);
@@ -188,7 +184,7 @@ loadCharacter(MODEL_URL, (p) => {
     notes.push('[the visitor pressed the evict button and launched you into space, but you came back]');
   };
 
-  status.textContent = 'Animated human · Hold Space to talk · N new visitor · 1–5 throw · E evict · H hide buttons · drag to orbit';
+  status.textContent = 'Animated human · Hold Space to talk · N new visitor · 1 throw pie · E evict · H hide buttons · drag to orbit';
 }).catch((err) => {
   status.textContent = 'Failed to load character (see console)';
   console.error(err);
@@ -207,7 +203,7 @@ function act(name) {
 }
 
 document.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => act(b.dataset.act)));
-const KEYS = { 1: 'stone', 2: 'tomato', 3: 'paint', 4: 'egg', 5: 'pie', e: 'evict', t: 'talk' };
+const KEYS = { 1: 'pie', e: 'evict', t: 'talk' };
 window.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
   if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) pushStart(); return; }

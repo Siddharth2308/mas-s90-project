@@ -328,6 +328,8 @@ class Character {
     addIdleOffset(this.bone('Abdomen'), new THREE.Vector3(1, 0, 0), breathe * 0.012);
     addIdleOffset(this.bone('Torso'), new THREE.Vector3(0, 0, 1), sway * 0.008);
     addIdleOffset(this.bone('Head'), new THREE.Vector3(0, 1, 0), sway * 0.018);
+    const speaking = this.mouth.scale[1] > 0.16 ? this.mouth.scale[1] - 0.16 : 0;
+    addIdleOffset(this.bone('Head'), new THREE.Vector3(1, 0, 0), Math.sin(this.elapsed * 5) * speaking * 0.012);
     addIdleOffset(this.bone('UpperArm.L'), new THREE.Vector3(1, 0, 0), breathe * 0.006);
     addIdleOffset(this.bone('UpperArm.R'), new THREE.Vector3(1, 0, 0), -breathe * 0.006);
 

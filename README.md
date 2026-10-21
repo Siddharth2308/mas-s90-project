@@ -22,7 +22,7 @@
 
 Press `Ctrl+C` in the terminal to stop it.
 
-### Talking to HARAMI (optional, one-time setup)
+### Talking to Pie (optional, one-time setup)
 
 The robot answers out loud using Claude Code (Haiku) and a local Piper voice.
 
@@ -43,7 +43,7 @@ Claude Code runs inside `quarantine/` with all tools turned off, so visitors can
 | --- | --- |
 | Hold `Space` | Talk (or type in the box and press Enter) |
 | `N` | New visitor (fresh conversation) |
-| `1`–`5` | Throw stone / tomato / paint / egg / pie |
+| `1` | Throw a pie |
 | `E` | Evict |
 | `T` | Talk test |
 | `H` | Hide the buttons (booth mode) |

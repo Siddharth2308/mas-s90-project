@@ -27,6 +27,8 @@ export class Thrower {
   }
 
   throw(kind) {
+    // Keep one throwable available: the cream pie.
+    if (kind !== 'pie') return;
     const spec = KINDS[kind];
     const color = kind === 'paint' ? PAINT_COLORS[Math.floor(Math.random() * PAINT_COLORS.length)] : null;
     const mesh = makeProjectile(kind, color);

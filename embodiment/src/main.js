@@ -10,7 +10,13 @@ const MODEL_URL = '/models/human-realistic-expressions.glb';
 
 const status = document.getElementById('status');
 const caption = document.getElementById('caption');
-const pieBtn = document.getElementById('pie-btn');
+const THROWABLES = {
+  pie: { label: '🥧 Pie', key: '1' },
+  stone: { label: '🪨 Rock', key: '2' },
+  tomato: { label: '🍅 Tomato', key: '3' },
+  egg: { label: '🥚 Egg', key: '4' },
+  paint: { label: '🎨 Paint', key: '5' },
+};
 
 // --- renderer / scene / camera ---
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -48,6 +54,7 @@ const LINES = {
     'Wow. Bold of you to walk in here looking like that.',
   ],
   pie: ['Cream on my shirt. Wonderful. You have the aim of a birthday clown.', 'Classic. Truly the height of comedy. Did you practice that?', 'I was saving that face for dessert.'],
+  hit: ['Ow. That was uncalled for.', 'You throw surprisingly well. I resent that.', 'I was using that shirt.'],
   pieRepeat: ['Another pie? I am starting to see a pattern. And filling.', 'All right, I have learned my lesson. What was it? Duck?', 'My warranty specifically excludes pastry.'],
   miss: ['Ha! Missed. Want to try with your eyes open?', 'Missed me. As expected.'],
   evict: ['Wait! You cannot evict me, I have a lease! Aaaaaah!'],
@@ -145,7 +152,7 @@ function newVisitor() {
   convId++;
   speaker?.stop();
   thrower?.clearStickers();
-  thrower?.resetPies();
+  thrower?.resetAmmo();
   caption.textContent = '';
   brainStatus.textContent = 'new visitor, fresh brain';
 }
@@ -165,13 +172,15 @@ loadCharacter(MODEL_URL, (p) => {
   speaker.on.idle = () => { if (!caption.classList.contains('heard')) caption.textContent = ''; };
   speaker.preload(FILLERS);
 
-  const NAMES = { pie: 'a pie' };
+  const NAMES = { pie: 'a pie', stone: 'a rock', tomato: 'a tomato', egg: 'an egg', paint: 'a paint balloon' };
   thrower = new Thrower(scene, camera, c);
-  thrower.on.ammo = (pies, maxPies, cooldown, recharge) => {
-    pieBtn.disabled = cooldown > 0 || pies === 0;
-    if (cooldown > 0) pieBtn.textContent = `🥧 Pie (${pies}/${maxPies}) · ${Math.ceil(cooldown)}s`;
-    else if (pies === 0) pieBtn.textContent = `🥧 Refilling · ${Math.ceil(recharge)}s`;
-    else pieBtn.textContent = `🥧 Throw pie (${pies}/${maxPies}) (1)`;
+  thrower.on.ammo = (kind, charges, capacity, cooldown, recharge) => {
+    const button = document.getElementById(`ammo-${kind}`);
+    const item = THROWABLES[kind];
+    button.disabled = cooldown > 0 || charges === 0;
+    if (cooldown > 0) button.textContent = `${item.label} (${charges}/${capacity}) · ${Math.ceil(cooldown)}s`;
+    else if (charges === 0) button.textContent = `${item.label} · refill ${Math.ceil(recharge)}s`;
+    else button.textContent = `${item.label} (${charges}/${capacity}) (${item.key})`;
   };
   thrower.refreshAmmo();
   thrower.on.hit = (kind) => {
@@ -179,7 +188,9 @@ loadCharacter(MODEL_URL, (p) => {
     hitStop = 0.05;
     shake = 0.06 * Math.min(1.8, 1 + (c.hitStreak - 1) * 0.16);
     notes.push(`[the visitor threw ${NAMES[kind]} at you and hit you]`);
-    say(repeated ? pick(LINES.pieRepeat) : pick(LINES.pie));
+    say(kind === 'pie'
+      ? (repeated ? pick(LINES.pieRepeat) : pick(LINES.pie))
+      : pick(LINES.hit));
   };
   thrower.on.miss = (kind) => {
     c.missed();
@@ -213,7 +224,7 @@ function act(name) {
 }
 
 document.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => act(b.dataset.act)));
-const KEYS = { 1: 'pie', e: 'evict', t: 'talk' };
+const KEYS = { 1: 'pie', 2: 'stone', 3: 'tomato', 4: 'egg', 5: 'paint', e: 'evict', t: 'talk' };
 window.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
   if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) pushStart(); return; }

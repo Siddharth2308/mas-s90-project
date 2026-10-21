@@ -3,17 +3,17 @@ import { FX_LAYER } from './character.js';
 import { sfx } from './sfx.js';
 
 const GRAVITY = -14;
-const PIE_CAPACITY = 3;
-const PIE_THROW_COOLDOWN = 1.4;
-const PIE_RECHARGE_TIME = 4;
+const THROWABLE_CAPACITY = 3;
+const THROW_COOLDOWN = 1.4;
+const RECHARGE_TIME = 4;
 const PAINT_COLORS = ['#ff3da5', '#3dff7a', '#ffe23d', '#3da0ff', '#b03dff', '#ff7a1a'];
 
 // What each throwable looks like, what it leaves behind, and how big the mark is.
 const KINDS = {
-  stone:  { soft: false, mark: () => bruiseTexture(),          size: 0.62, target: 'any' },
-  tomato: { soft: true,  mark: () => splatTexture('#d4180f'), size: 0.95, target: 'any' },
-  paint:  { soft: true,  mark: (c) => splatTexture(c),        size: 1.2,  target: 'any' },
-  egg:    { soft: true,  mark: () => splatTexture('#c9c23a', '#fff6c8'), size: 0.9, target: 'any' },
+  stone:  { soft: false, mark: () => bruiseTexture(),          size: 0.62, target: 'abdomen' },
+  tomato: { soft: true,  mark: () => splatTexture('#d4180f'), size: 0.95, target: 'abdomen' },
+  paint:  { soft: true,  mark: (c) => splatTexture(c),        size: 1.2,  target: 'abdomen' },
+  egg:    { soft: true,  mark: () => splatTexture('#c9c23a', '#fff6c8'), size: 0.9, target: 'abdomen' },
   pie:    { soft: true,  mark: () => creamSplatTexture(), size: 1.0, target: 'abdomen' },
 };
 
@@ -26,21 +26,20 @@ export class Thrower {
     this.particles = [];
     this.stickers = [];
     this.raycaster = new THREE.Raycaster(); // only sees layer 0 = the character's body
-    this.pies = PIE_CAPACITY;
-    this.throwCooldown = 0;
-    this.rechargeTimer = 0;
-    this.ammoState = '';
+    this.ammo = Object.fromEntries(Object.keys(KINDS).map((kind) => [kind, {
+      charges: THROWABLE_CAPACITY, cooldown: 0, recharge: 0, lastState: '',
+    }]));
     this.on = {}; // callbacks: hit(kind, point), miss(kind)
   }
 
   throw(kind) {
-    // Keep one throwable available: the cream pie.
-    if (kind !== 'pie') return;
-    if (this.throwCooldown > 0 || this.pies < 1) return false;
-    this.pies--;
-    this.throwCooldown = PIE_THROW_COOLDOWN;
-    if (this.pies < PIE_CAPACITY && this.rechargeTimer <= 0) this.rechargeTimer = PIE_RECHARGE_TIME;
-    this.notifyAmmo();
+    if (!KINDS[kind]) return false;
+    const ammo = this.ammo[kind];
+    if (ammo.cooldown > 0 || ammo.charges < 1) return false;
+    ammo.charges--;
+    ammo.cooldown = THROW_COOLDOWN;
+    if (ammo.charges < THROWABLE_CAPACITY && ammo.recharge <= 0) ammo.recharge = RECHARGE_TIME;
+    this.notifyAmmo(kind);
     const spec = KINDS[kind];
     const color = kind === 'paint' ? PAINT_COLORS[Math.floor(Math.random() * PAINT_COLORS.length)] : null;
     const mesh = makeProjectile(kind, color);
@@ -73,34 +72,39 @@ export class Thrower {
     return true;
   }
 
-  resetPies() {
-    this.pies = PIE_CAPACITY;
-    this.throwCooldown = 0;
-    this.rechargeTimer = 0;
-    this.notifyAmmo(true);
+  resetAmmo() {
+    for (const ammo of Object.values(this.ammo)) {
+      ammo.charges = THROWABLE_CAPACITY;
+      ammo.cooldown = 0;
+      ammo.recharge = 0;
+    }
+    this.refreshAmmo();
   }
 
-  refreshAmmo() { this.notifyAmmo(true); }
+  refreshAmmo() {
+    for (const kind of Object.keys(this.ammo)) this.notifyAmmo(kind, true);
+  }
 
-  notifyAmmo(force = false) {
-    const cooldown = Math.ceil(this.throwCooldown);
-    const recharge = Math.ceil(this.rechargeTimer);
-    const state = `${this.pies}:${cooldown}:${recharge}`;
-    if (!force && state === this.ammoState) return;
-    this.ammoState = state;
-    this.on.ammo?.(this.pies, PIE_CAPACITY, this.throwCooldown, this.rechargeTimer);
+  notifyAmmo(kind, force = false) {
+    const ammo = this.ammo[kind];
+    const state = `${ammo.charges}:${Math.ceil(ammo.cooldown)}:${Math.ceil(ammo.recharge)}`;
+    if (!force && state === ammo.lastState) return;
+    ammo.lastState = state;
+    this.on.ammo?.(kind, ammo.charges, THROWABLE_CAPACITY, ammo.cooldown, ammo.recharge);
   }
 
   update(dt) {
-    this.throwCooldown = Math.max(0, this.throwCooldown - dt);
-    if (this.pies < PIE_CAPACITY) {
-      this.rechargeTimer -= dt;
-      if (this.rechargeTimer <= 0) {
-        this.pies++;
-        this.rechargeTimer = this.pies < PIE_CAPACITY ? PIE_RECHARGE_TIME : 0;
+    for (const [kind, ammo] of Object.entries(this.ammo)) {
+      ammo.cooldown = Math.max(0, ammo.cooldown - dt);
+      if (ammo.charges < THROWABLE_CAPACITY) {
+        ammo.recharge -= dt;
+        if (ammo.recharge <= 0) {
+          ammo.charges++;
+          ammo.recharge = ammo.charges < THROWABLE_CAPACITY ? RECHARGE_TIME : 0;
+        }
       }
+      this.notifyAmmo(kind);
     }
-    this.notifyAmmo();
 
     const prev = new THREE.Vector3();
     const dir = new THREE.Vector3();

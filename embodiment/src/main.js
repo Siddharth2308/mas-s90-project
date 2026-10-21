@@ -5,8 +5,8 @@ import { Thrower } from './projectiles.js';
 import { sfx } from './sfx.js';
 import { Listener, Speaker, Sentences, ask, resetBrain } from './voice.js';
 
-// Animated human from the local glTF sample assets.
-const MODEL_URL = '/models/human-realistic.glb';
+// Pie: MPFB human built by blender/make_human.py, exported by blender/export_human.py.
+const MODEL_URL = '/models/pie.glb';
 
 const status = document.getElementById('status');
 const caption = document.getElementById('caption');

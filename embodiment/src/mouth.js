@@ -16,8 +16,13 @@ const LETTER_TO_VISEME = {
   m: 'mbp', b: 'mbp', p: 'mbp', f: 'ee', v: 'ee',
 };
 
+// Models with real lips (the MPFB human) have these viseme shape keys; the mouth then drives them
+// from the same [width, height] instead of showing the LED bar.
+const LIP_KEYS = { open: 'aa_02', round: 'ow_08', pucker: 'w_uw_07', wide: 'y_iy_ih_ix_06', closed: 'p_b_m_21' };
+
 export class Mouth {
-  constructor(head, eyes) {
+  constructor(head, eyes, morphMeshes = []) {
+    this.lips = morphMeshes.filter((m) => LIP_KEYS.open in m.morphTargetDictionary);
     // Place the mouth on the front of the head, low on the face.
     const box = eyes ? new THREE.Box3().setFromObject(head, true) : null;
     const size = box?.getSize(new THREE.Vector3());
@@ -59,6 +64,7 @@ export class Mouth {
       head.add(this.mesh);
     }
     this.baseScale = this.mesh.scale.clone(); // attach() compensates for the bone's scale
+    if (this.lips.length) this.mesh.visible = false;
 
     this.scale = [...VISEMES.rest];
     this.target = [...VISEMES.rest];
@@ -145,5 +151,28 @@ export class Mouth {
   applyScale() {
     const b = this.baseScale;
     this.mesh.scale.set(b.x * this.scale[0], b.y * this.scale[1], b.z);
+    if (this.lips.length) this.applyLips();
+  }
+
+  // [width, height] -> viseme weights: height opens the jaw, width picks wide ("ee") vs round ("oo").
+  applyLips() {
+    const [w, h] = this.scale;
+    const clamp = (x) => Math.min(1, Math.max(0, x));
+    const open = clamp((h - 0.12) / 0.88);
+    const wide = clamp((w - 0.9) / 0.35);
+    const round = clamp((0.8 - w) / 0.35);
+    const weights = {
+      open: open * (1 - round) * 0.85,
+      round: open * round * 0.8,
+      pucker: (1 - open) * round * 0.7,
+      wide: wide * 0.6,
+      closed: clamp((0.1 - h) / 0.08) * 0.8,
+    };
+    for (const mesh of this.lips) {
+      for (const [k, v] of Object.entries(weights)) {
+        const i = mesh.morphTargetDictionary[LIP_KEYS[k]];
+        if (i !== undefined) mesh.morphTargetInfluences[i] = v;
+      }
+    }
   }
 }

@@ -40,15 +40,21 @@ class Character {
     });
     head ??= this.bone('Head') ?? this.bone('Neck') ?? this.root;
     this.head = head;
-    this.mouth = new Mouth(head, eyes);
-    this.mouth.mesh.layers.set(FX_LAYER);
 
-    // Face morphs: Angry / Surprised / Sad
+    // Face morphs: Angry / Surprised / Sad (+ Smug / Blink and visemes on the human).
     this.faceMeshes = [];
-    head.traverse?.((o) => { if (o.isMesh && o.morphTargetDictionary) this.faceMeshes.push(o); });
-    this.face = { Angry: 0, Surprised: 0, Sad: 0 };
-    this.faceTarget = { Angry: 0, Surprised: 0, Sad: 0 };
+    this.root.traverse((o) => {
+      if (o.isMesh && o.morphTargetDictionary) this.faceMeshes.push(o);
+      if (o.isMesh && o.name.startsWith('Cyborg')) o.layers.set(FX_LAYER); // glowing seams: not hit targets
+      if (o.isMesh && o.material.alphaTest > 0) o.material.alphaToCoverage = true; // soft hair/lash edges
+    });
+    this.mouth = new Mouth(head, eyes, this.faceMeshes);
+    this.mouth.mesh.layers.set(FX_LAYER);
+    this.face = { Angry: 0, Surprised: 0, Sad: 0, Smug: 0, Blink: 0 };
+    this.faceTarget = { Angry: 0, Surprised: 0, Sad: 0, Smug: 0 };
     this.angryTimer = 0;
+    this.blinkIn = 2 + Math.random() * 3;
+    this.blinkT = -1;
 
     // Animation
     this.mixer = new THREE.AnimationMixer(this.root);
@@ -57,6 +63,7 @@ class Character {
     this.idle = Object.entries(this.actions).find(([name]) => name.toLowerCase().includes('idle'))?.[1]
       ?? Object.values(this.actions)[0];
     if (this.idle) this.idle.setEffectiveTimeScale(0.72).play();
+    else this.relaxPose();
     this.oneShot = null;
     this.mixer.addEventListener('finished', (e) => {
       if (e.action !== this.oneShot) return;
@@ -98,6 +105,20 @@ class Character {
     };
     for (const k of aliases[name] ?? [name.replace(/\./g, '')]) if (this.bones[k]) return this.bones[k];
     return Object.values(this.bones)[0];
+  }
+
+  // No idle animation (e.g. the MPFB human): drop the arms from the A-pose to the sides.
+  relaxPose() {
+    const forward = new THREE.Vector3(0, 0, 1);
+    for (const [name, angle] of [['UpperArm.L', -0.6], ['UpperArm.R', 0.6], ['LowerArm.L', 0.08], ['LowerArm.R', -0.08]]) {
+      const bone = this.bone(name);
+      if (!bone?.parent) continue;
+      // rotate about the world forward axis, expressed in the bone's parent space
+      const parentQ = bone.parent.getWorldQuaternion(new THREE.Quaternion());
+      const axis = forward.clone().applyQuaternion(parentQ.invert());
+      bone.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(axis, angle));
+      bone.updateMatrixWorld(true);
+    }
   }
 
   // Center of the meshes attached directly to a bone (e.g. 'Head', 'Torso').
@@ -336,8 +357,19 @@ class Character {
     // face: surprised on impact, then angry for a bit
     this.angryTimer = Math.max(0, this.angryTimer - dt);
     this.faceTarget.Angry = this.angryTimer > 0 ? 0.9 : 0;
+    this.faceTarget.Smug = this.angryTimer > 0 ? 0 : 0.35; // resting smirk
     this.face.Surprised = Math.max(0, this.face.Surprised - dt * 2.5);
     this.face.Angry += (this.faceTarget.Angry - this.face.Angry) * Math.min(1, dt * 6);
+    this.face.Smug += (this.faceTarget.Smug - this.face.Smug) * Math.min(1, dt * 3);
+
+    // blink every few seconds (0.16 s close-open)
+    this.blinkIn -= dt;
+    if (this.blinkIn <= 0) { this.blinkT = 0; this.blinkIn = 2 + Math.random() * 4; }
+    if (this.blinkT >= 0) {
+      this.blinkT += dt;
+      this.face.Blink = Math.sin(Math.min(1, this.blinkT / 0.16) * Math.PI);
+      if (this.blinkT > 0.16) { this.blinkT = -1; this.face.Blink = 0; }
+    }
     for (const mesh of this.faceMeshes) {
       for (const [name, v] of Object.entries(this.face)) {
         const i = mesh.morphTargetDictionary[name];

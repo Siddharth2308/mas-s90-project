@@ -2,6 +2,23 @@
 
 - `embodiment/` – the Three.js character app
 - `hologram_booth.scad` – OpenSCAD model of the Pepper's ghost booth
+- `blender/` – scripts that build Pie's body in Blender and export it to `embodiment/public/models/pie.glb`
+
+## Rebuilding Pie's body (optional)
+
+Needs Blender 5.2, the MPFB extension and three CC0 MakeHuman asset packs
+(`makehuman_system_assets_cc0.zip`, `visemes01.zip`, `faceunits01.zip` from
+https://static.makehumancommunity.org/assets/assetpacks.html):
+
+```bash
+B=/Applications/Blender.app/Contents/MacOS/Blender
+$B --online-mode --command extension install -s -e mpfb               # once
+$B --background --python blender/install_packs.py -- path/to/*.zip     # once
+$B --background --python blender/make_human.py    # builds blender/human.blend + previews in blender/renders/
+$B --background --python blender/export_human.py  # writes embodiment/public/models/pie.glb
+```
+
+Look, clothes, tints, cyborg seams and the emotion shape keys are set at the top of `make_human.py`.
 
 ## Running the app on your PC
 

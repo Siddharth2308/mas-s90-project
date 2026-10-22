@@ -61,6 +61,10 @@ Claude Code runs inside `quarantine/` with all tools turned off, so visitors can
 | Hold `Space` | Talk (or type in the box and press Enter) |
 | `N` | New visitor (fresh conversation) |
 | `1` | Throw a pie |
+| `2` | Throw a rock |
+| `3` | Throw a tomato |
+| `4` | Throw an egg |
+| `5` | Throw a paint balloon |
 | `E` | Evict |
 | `T` | Talk test |
 | `H` | Hide the buttons (booth mode) |

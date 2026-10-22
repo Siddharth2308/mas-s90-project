@@ -23,6 +23,8 @@ const LIP_KEYS = { open: 'aa_02', round: 'ow_08', pucker: 'w_uw_07', wide: 'y_iy
 export class Mouth {
   constructor(head, eyes, morphMeshes = []) {
     this.lips = morphMeshes.filter((m) => LIP_KEYS.open in m.morphTargetDictionary);
+    const hasRealExpressionFace = morphMeshes.some((m) =>
+      ['Smile', 'Smirk', 'Angry'].some((key) => key in m.morphTargetDictionary));
     // Place the mouth on the front of the head, low on the face.
     const box = eyes ? new THREE.Box3().setFromObject(head, true) : null;
     const size = box?.getSize(new THREE.Vector3());
@@ -64,9 +66,7 @@ export class Mouth {
       head.add(this.mesh);
     }
     this.baseScale = this.mesh.scale.clone(); // attach() compensates for the bone's scale
-    // A model with a real face (lip or expression shape keys) doesn't need the LED bar.
-    const realFace = morphMeshes.some((m) => ['Smile', 'Smirk', 'Angry'].some((k) => k in m.morphTargetDictionary));
-    if (this.lips.length || realFace) this.mesh.visible = false;
+    if (this.lips.length || hasRealExpressionFace) this.mesh.visible = false;
 
     this.scale = [...VISEMES.rest];
     this.target = [...VISEMES.rest];

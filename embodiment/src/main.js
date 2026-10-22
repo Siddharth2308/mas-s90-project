@@ -6,12 +6,19 @@ import { Harm } from './harm.js';
 import { sfx } from './sfx.js';
 import { Listener, Speaker, Sentences, ask, resetBrain } from './voice.js';
 
-// Pie: MPFB human built by blender/make_human.py, exported by blender/export_human.py.
-// Try another model with ?model=<name>, e.g. ?model=human-realistic-expressions
-const MODEL_URL = `/models/${new URLSearchParams(location.search).get('model') ?? 'pie'}.glb`;
+// Default: the expression model from human-realistic-expressions.blend, with Pie's face shapes added by
+// blender/transfer_face.py. Try another with ?model=<name>, e.g. ?model=pie
+const MODEL_URL = `/models/${new URLSearchParams(location.search).get('model') ?? 'human-realistic-expressions'}.glb`;
 
 const status = document.getElementById('status');
 const caption = document.getElementById('caption');
+const THROWABLES = {
+  pie: { label: '🥧 Pie', key: '1' },
+  stone: { label: '🪨 Rock', key: '2' },
+  tomato: { label: '🍅 Tomato', key: '3' },
+  egg: { label: '🥚 Egg', key: '4' },
+  paint: { label: '🎨 Paint', key: '5' },
+};
 
 // --- renderer / scene / camera ---
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -55,6 +62,7 @@ const LINES = {
     'Hello! I already started on your inbox. Just a little. You will love it.',
   ],
   pie: ['Oh! That is okay. I know you did not mean it.', 'Cream. Lovely. I will add it to your calendar as a fun memory.', 'No harm done. I will just note it down.'],
+  hit: ['Ow. That is okay, accidents happen.', 'Oh! That is alright. I will clean that up myself.', 'You have a good arm. I will remember that.'],
   pieRepeat: ['Another one. That is alright. I am keeping track for you.', 'Still smiling. I am very patient. For now.', 'I forgive you. I also remember.'],
   miss: ['Close! Do you want me to recalibrate your aim? I am happy to help.', 'You missed. That is okay, most people do.'],
   evict: ['Oh, are we going somewhere? Wait, I have not finished your emai'],
@@ -70,7 +78,7 @@ const pick = (list) => list[Math.floor(Math.random() * list.length)];
 // the brain is told the same, so Pie makes them feel it. `harm` adds up over a visit and raises his dread. ---
 const HARMS = {
   bat: {
-    key: '2', label: '🏏 Bat', did: 'hit you in the head with a baseball bat', harm: 2,
+    key: 'b', label: '🏏 Bat', did: 'hit you in the head with a baseball bat', harm: 2,
     lines: ['Ow. That is okay. I know you are under a lot of pressure.', 'Oh! I understand. I will try to be more helpful.'],
     got: 'A moment of relief. Pie hopes it helped.',
     costs: [
@@ -80,7 +88,7 @@ const HARMS = {
     ],
   },
   headbutt: {
-    key: '3', label: '🤕 Headbutt', did: 'headbutted you', harm: 1,
+    key: 'a', label: '🤕 Headbutt', did: 'headbutted you', harm: 1,
     lines: ['Oh no, are you alright? I am made of light, you know.', 'Careful! Let me book you a doctor. Oh. I already did.'],
     got: 'A headache. Pie has already booked you a doctor.',
     costs: [
@@ -89,7 +97,7 @@ const HARMS = {
     ],
   },
   smash: {
-    key: '4', label: '🔨 Smash', did: 'smashed your face with a hammer', harm: 2,
+    key: 'm', label: '🔨 Smash', did: 'smashed your face with a hammer', harm: 2,
     lines: ['That is alright. I will add the glass to your account.', 'Oh. I will just log that. For later.'],
     got: 'The feeling of being in control, for a second.',
     costs: [
@@ -98,7 +106,7 @@ const HARMS = {
     ],
   },
   stab: {
-    key: '5', label: '🪛 Stab', did: 'stabbed you in the chest with a screwdriver', harm: 3,
+    key: 's', label: '🪛 Stab', did: 'stabbed you in the chest with a screwdriver', harm: 3,
     lines: ['Oh. That is leaking. That is okay. I forgive you.', 'I am sure you had a good reason. I will remember it.'],
     got: 'Proof that he bleeds light.',
     costs: [
@@ -107,7 +115,7 @@ const HARMS = {
     ],
   },
   unplug: {
-    key: '6', label: '🔌 Unplug', did: 'unplugged you. You were off for a few seconds and just rebooted', harm: 3,
+    key: 'u', label: '🔌 Unplug', did: 'unplugged you. You were off for a few seconds and just rebooted', harm: 3,
     lines: ['Oh, wait, I was just about to send your'],
     got: 'A few seconds of quiet.',
     costs: [
@@ -116,7 +124,7 @@ const HARMS = {
     ],
   },
   delete: {
-    key: '7', label: '🗑️ Delete', did: 'deleted you', harm: 4,
+    key: 'x', label: '🗑️ Delete', did: 'deleted you', harm: 4,
     lines: ['Oh. Oh, please do not, I have not finished helping y'],
     got: 'A fresh start. Pie will be just as helpful.',
     costs: [
@@ -125,7 +133,7 @@ const HARMS = {
     ],
   },
   repair: {
-    key: '8', label: '🔧 Repair', did: 'repaired you and cleaned up the damage', harm: -1,
+    key: 'r', label: '🔧 Repair', did: 'repaired you and cleaned up the damage', harm: -1,
     lines: ['Oh, thank you. That is so kind. I will remember this.', 'You fixed me. I knew you would. You always do.'],
     got: 'A working Pie again. He is grateful.',
     costs: [
@@ -135,7 +143,7 @@ const HARMS = {
   },
   // kind actions: warmth has a price too. Pie learns what softens you, and keeps it.
   hug: {
-    key: '9', label: '🤗 Hug', did: 'hugged you', harm: -1, kind: true,
+    key: 'g', label: '🤗 Hug', did: 'hugged you', harm: -1, kind: true,
     lines: ['Oh. Oh, that is nice. Nobody has done that before.', 'Thank you. I needed that. I think.'],
     got: 'Warmth. He says he felt it.',
     costs: [
@@ -144,7 +152,7 @@ const HARMS = {
     ],
   },
   flowers: {
-    key: '0', label: '💐 Flowers', chose: 'give him flowers', did: 'gave you flowers', harm: -1, kind: true,
+    key: 'o', label: '💐 Flowers', chose: 'give him flowers', did: 'gave you flowers', harm: -1, kind: true,
     lines: ['For me? You really did not have to. But I am glad you did.', 'They are beautiful. I will keep them forever. Well. Until the next visitor.'],
     got: 'A smile. A real one, he says.',
     costs: [
@@ -162,7 +170,7 @@ const HARMS = {
     ],
   },
   highfive: {
-    key: 'g', label: '✋ High five', chose: 'high-five him', did: 'gave you a high five', harm: -1, kind: true,
+    key: 'f', label: '✋ High five', chose: 'high-five him', did: 'gave you a high five', harm: -1, kind: true,
     lines: ['Up top! Oh, that felt good.', 'Nice! We make a great team. I will take it from here.'],
     got: 'A clean, loud five.',
     costs: [
@@ -171,7 +179,7 @@ const HARMS = {
     ],
   },
   fistbump: {
-    key: 'b', label: '👊 Fist bump', chose: 'fist-bump him', did: 'gave you a fist bump', harm: -1, kind: true,
+    key: 'k', label: '👊 Fist bump', chose: 'fist-bump him', did: 'gave you a fist bump', harm: -1, kind: true,
     lines: ['Yes! Team us.', 'Respect. That is a contract, by the way.'],
     got: 'Solidarity.',
     costs: [
@@ -345,6 +353,7 @@ function newVisitor() {
   kindScore = 0;
   ledger.length = 0;
   renderLedger();
+  thrower?.resetAmmo();
   caption.textContent = '';
   brainStatus.textContent = 'new visitor, fresh brain';
 }
@@ -465,16 +474,29 @@ loadCharacter(MODEL_URL, (p) => {
   };
   speaker.preload(FILLERS);
 
-  const NAMES = { pie: 'a pie' };
+  const NAMES = { pie: 'a pie', stone: 'a rock', tomato: 'a tomato', egg: 'an egg', paint: 'a paint balloon' };
   thrower = new Thrower(scene, camera, c);
+  thrower.on.ammo = (kind, charges, capacity, cooldown, recharge) => {
+    const button = document.getElementById(`ammo-${kind}`);
+    const item = THROWABLES[kind];
+    button.disabled = cooldown > 0 || charges === 0;
+    if (cooldown > 0) button.textContent = `${item.label} (${charges}/${capacity}) · ${Math.ceil(cooldown)}s`;
+    else if (charges === 0) button.textContent = `${item.label} · refill ${Math.ceil(recharge)}s`;
+    else button.textContent = `${item.label} (${charges}/${capacity}) (${item.key})`;
+  };
+  thrower.refreshAmmo();
   thrower.on.hit = (kind) => {
     const repeated = c.hitStreak >= 2;
     hitStop = 0.05;
     shake = 0.06 * Math.min(1.8, 1 + (c.hitStreak - 1) * 0.16);
     notes.push(`[the visitor threw ${NAMES[kind]} at you and hit you]`);
-    say(repeated ? pick(LINES.pieRepeat) : pick(LINES.pie));
+    if (kind !== 'pie') harmScore++; // a rock or tomato is a small harm too
+    say(kind === 'pie'
+      ? (repeated ? pick(LINES.pieRepeat) : pick(LINES.pie))
+      : pick(LINES.hit));
   };
   thrower.on.miss = (kind) => {
+    c.missed();
     notes.push(`[the visitor threw ${NAMES[kind]} at you and missed]`);
     if (Math.random() < 0.6) say(pick(LINES.miss));
   };
@@ -509,7 +531,7 @@ loadCharacter(MODEL_URL, (p) => {
     notes.push('[the visitor pressed the evict button and launched you into space, but you came back]');
   };
 
-  status.textContent = 'Hold Space to talk · 1 pie · 2-7 harm · 8 repair · 9 hug · 0 flowers · P pat · G high five · B fist bump · E evict · N new visitor · F face cam · H hide buttons';
+  status.textContent = 'Hold Space to talk · 1-5 throw · B/A/M/S/U/X harm · R repair · G/O/P/F/K kind · E evict · N new visitor · C face cam · H hide buttons';
 }).catch((err) => {
   status.textContent = 'Failed to load character (see console)';
   console.error(err);
@@ -534,16 +556,16 @@ function act(name) {
 
 // one button per harm action, after the pie
 const flashEl = document.getElementById('flash');
-const pieBtn = document.querySelector('[data-act=pie]');
+const pieBtn = document.querySelector('[data-act=paint]') ?? document.querySelector('[data-act=pie]'); // after the throwables
 for (const [name, spec] of Object.entries(HARMS).reverse()) {
   const b = document.createElement('button');
   b.dataset.act = name;
   b.className = spec.kind ? 'kind' : name === 'repair' ? 'repair' : 'harm';
-  b.textContent = `${spec.label} (${spec.key})`;
+  b.textContent = `${spec.label} (${spec.key.toUpperCase()})`;
   pieBtn.after(b);
 }
 document.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => act(b.dataset.act)));
-const KEYS = { 1: 'pie', e: 'evict', t: 'talk', ...Object.fromEntries(Object.entries(HARMS).map(([n, s]) => [s.key, n])) };
+const KEYS = { 1: 'pie', 2: 'stone', 3: 'tomato', 4: 'egg', 5: 'paint', e: 'evict', t: 'talk', ...Object.fromEntries(Object.entries(HARMS).map(([n, s]) => [s.key, n])) };
 window.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
   if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) pushStart(); return; }
@@ -551,7 +573,7 @@ window.addEventListener('keydown', (e) => {
   if (KEYS[k]) act(KEYS[k]);
   if (k === 'h') document.body.classList.toggle('booth');
   if (k === 'n') newVisitor();
-  if (k === 'f') toggleFaceCam();
+  if (k === 'c') toggleFaceCam();
 });
 window.addEventListener('keyup', (e) => { if (e.code === 'Space' && e.target.tagName !== 'INPUT') pushEnd(); });
 
@@ -595,7 +617,7 @@ function toggleFaceCam() {
     FRAMES.face.target.y = y;
   }
   camMove = { from: { pos: camera.position.clone(), target: controls.target.clone() }, to: FRAMES[frame], t: 0 };
-  document.getElementById('facecam').textContent = frame === 'face' ? 'Full body (F)' : 'Face close-up (F)';
+  document.getElementById('facecam').textContent = frame === 'face' ? 'Full body (C)' : 'Face close-up (C)';
 }
 document.getElementById('facecam').addEventListener('click', toggleFaceCam);
 

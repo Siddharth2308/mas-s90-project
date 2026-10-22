@@ -6,7 +6,8 @@ e.g.   blender --background human-realistic-expressions.blend --python blender/t
 
 The meshes don't share topology, so each head vertex of the target is matched to the closest point on Pie's
 face (after lining the two faces up by the eyes) and moves the way that point moves in each shape key.
-Shape keys the target already has (its own Smile, Angry, Smirk, Sad...) are left alone.
+The target's own shape keys are kept; ones whose names clash with Pie's are renamed first (see RENAME),
+so both sets of expressions end up on the model.
 """
 import sys
 from pathlib import Path
@@ -29,11 +30,12 @@ KEYS = [
     'eyeLookUpLeft', 'eyeLookUpRight', 'eyeLookDownLeft', 'eyeLookDownRight',
     'eyeLookInLeft', 'eyeLookInRight', 'eyeLookOutLeft', 'eyeLookOutRight',
     'browInnerUp', 'browOuterUpLeft', 'browOuterUpRight',
-    # expressions (make_human.py); Happy/Smug are covered by a target's own Smile/Smirk when it has them
+    # expressions (make_human.py)
     'Happy', 'Smug', 'Angry', 'Sad', 'Surprised', 'Bored', 'Pain', 'Wince', 'Disgust', 'Contempt', 'Cold', 'Fear',
     'Blink', 'MouthOpen',
 ]
-COVERED_BY = {'Happy': 'Smile', 'Smug': 'Smirk'}
+# The target's own keys that share a name with Pie's: renamed so both survive (character.js EXPRESSIONS).
+RENAME = {'Angry': 'Scowl', 'Sad': 'Frown'}
 REACH = 0.02   # source distance (m) where a match starts fading out
 FADE = 0.03    # ...and is gone this much further away
 
@@ -120,6 +122,12 @@ print(f'{len(matches)} head vertices matched ({sum(1 for m in matches if m[1] ==
 # --- write the shape keys ---
 if not tmesh.shape_keys:
     target.shape_key_add(name='Basis', from_mix=False)
+for k in tmesh.shape_keys.key_blocks[1:]:  # keys left muted or dialed up while sculpting would be skipped
+    k.mute = False                            # or baked in by the exporter
+    k.value = 0
+for old, new in RENAME.items():
+    if old in tmesh.shape_keys.key_blocks:
+        tmesh.shape_keys.key_blocks[old].name = new
 existing = set(tmesh.shape_keys.key_blocks.keys())
 n = len(tmesh.vertices)
 base = np.empty(n * 3, np.float32)
@@ -128,7 +136,7 @@ base = base.reshape(n, 3)
 inv = np.array(target.matrix_world.inverted().to_3x3(), np.float32)
 added = []
 for name in KEYS:
-    if name in existing or COVERED_BY.get(name) in existing:
+    if name in existing:
         continue
     out = base.copy()
     moved = False

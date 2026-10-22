@@ -6,10 +6,10 @@ import { Mouth } from './mouth.js';
 export const FX_LAYER = 1;
 
 // Expression shape keys (blender/make_human.py). Models without some of them just skip those.
-export const EXPRESSIONS = ['Smug', 'Angry', 'Surprised', 'Sad', 'Happy', 'Bored', 'Pain', 'Wince', 'Disgust', 'Contempt', 'Cold', 'Fear'];
+export const EXPRESSIONS = ['Smug', 'Angry', 'Surprised', 'Sad', 'Happy', 'Bored', 'Pain', 'Wince', 'Disgust', 'Contempt', 'Cold', 'Fear',
+  // authored in human-realistic-expressions.blend (its Angry/Sad are renamed Scowl/Frown on export)
+  'Smile', 'Smirk', 'Scowl', 'Frown'];
 const RESTING = { name: 'Happy', weight: 0.25 }; // a gentle, helpful smile
-// Other models name their face keys differently; drive theirs from ours (e.g. human-realistic-expressions.glb).
-const FACE_ALIASES = { Smile: ['Happy'], Smirk: ['Smug'] };
 
 // Body language, as rotations about world axes (x = his left, y = up, z = toward the visitor).
 const X = new THREE.Vector3(1, 0, 0), Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
@@ -32,17 +32,18 @@ export const POSTURES = {
 // Face for each kind of hit: [quick flash, mood that follows].
 const HIT_FACES = {
   pie: ['Surprised', 'Angry'], stone: ['Pain', 'Angry'], bat: ['Pain', 'Angry'], smash: ['Wince', 'Pain'],
-  stab: ['Pain', 'Fear'], headbutt: ['Surprised', 'Disgust'],
+  stab: ['Pain', 'Fear'], headbutt: ['Surprised', 'Disgust'], tomato: ['Surprised', 'Disgust'], egg: ['Surprised', 'Disgust'],
+  paint: ['Surprised', 'Frown'],
 };
 
-export function loadCharacter(url, onProgress) {
+export function loadCharacter(url, onProgress, { applyRelaxPose = true } = {}) {
   return new Promise((resolve, reject) => {
-    new GLTFLoader().load(url, (gltf) => resolve(new Character(gltf)), onProgress, reject);
+    new GLTFLoader().load(url, (gltf) => resolve(new Character(gltf, { applyRelaxPose })), onProgress, reject);
   });
 }
 
 class Character {
-  constructor(gltf) {
+  constructor(gltf, { applyRelaxPose = true } = {}) {
     this.root = gltf.scene;
     this.bones = {};
     this.root.traverse((o) => { if (o.isBone) this.bones[o.name] = o; });
@@ -71,7 +72,7 @@ class Character {
     head ??= this.bone('Head') ?? this.bone('Neck') ?? this.root;
     this.head = head;
 
-    // Face morphs: Angry / Surprised / Sad (+ Smug / Blink and visemes on the human).
+    // Facial morphs exported from human-realistic-expressions.blend.
     this.faceMeshes = [];
     this.glowMeshes = [];  // cyborg seams: flicker when glitching, go dark when unplugged
     this.meshes = [];
@@ -113,7 +114,7 @@ class Character {
     this.idle = Object.entries(this.actions).find(([name]) => name.toLowerCase().includes('idle'))?.[1]
       ?? Object.values(this.actions)[0];
     if (this.idle) this.idle.setEffectiveTimeScale(0.72).play();
-    else if (this.inAPose()) this.relaxPose();
+    else if (applyRelaxPose && this.inAPose()) this.relaxPose();
     this.oneShot = null;
     this.mixer.addEventListener('finished', (e) => {
       if (e.action !== this.oneShot) return;
@@ -434,6 +435,13 @@ class Character {
     this.gazeTarget = { x: 0, y: -0.12 };
   }
 
+  // A throw missed him: a quick smug look.
+  missed() {
+    if (this.busy) return;
+    this.express('Smug', null, 0.9);
+    this.settle(1.5);
+  }
+
   startEvict() {
     if (this.busy) return false;
     if (this.oneShot) { this.oneShot.stop(); this.oneShot = null; this.idle?.reset().play(); }
@@ -646,9 +654,6 @@ class Character {
       if (this.blinkT > 0.16) this.blinkT = -1;
     }
     if (this.off) this.face.Blink = 1; // unplugged: eyes shut
-    for (const [name, sources] of Object.entries(FACE_ALIASES)) {
-      this.face[name] = Math.max(...sources.map((s) => this.face[s] ?? 0));
-    }
     for (const mesh of this.faceMeshes) {
       for (const [name, v] of Object.entries(this.face)) {
         const i = mesh.morphTargetDictionary[name];

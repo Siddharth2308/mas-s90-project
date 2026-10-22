@@ -20,6 +20,13 @@ $B --background --python blender/export_human.py  # writes embodiment/public/mod
 
 Look, clothes, tints, cyborg seams and the emotion shape keys are set at the top of `make_human.py`.
 
+The default model is `human-realistic-expressions.blend`. After editing it, rebuild the app model; this keeps its own
+shape keys (Angry/Sad are renamed Scowl/Frown) and adds Pie's face (lip sync, gaze, blink, brows, expressions):
+
+```bash
+$B --background human-realistic-expressions.blend --python blender/transfer_face.py -- mh_3305_mocap embodiment/public/models/human-realistic-expressions.glb
+```
+
 ## Running the app on your PC
 
 1. Install [Node.js](https://nodejs.org) (the LTS version, 22 or newer).
@@ -61,7 +68,17 @@ Claude Code runs inside `quarantine/` with all tools turned off, so visitors can
 | Hold `Space` | Talk (or type in the box and press Enter) |
 | `N` | New visitor (fresh conversation) |
 | `1` | Throw a pie |
+| `2` | Throw a rock |
+| `3` | Throw a tomato |
+| `4` | Throw an egg |
+| `5` | Throw a paint balloon |
+| `B` `A` `M` `S` | Harm: bat, headbutt, smash, stab |
+| `U` `X` | Unplug, delete |
+| `R` | Repair |
+| `G` `O` `P` `F` `K` | Kind: hug, flowers, head pat, high five, fist bump |
+| `C` | Face close-up camera |
 | `E` | Evict |
 | `T` | Talk test |
 | `H` | Hide the buttons (booth mode) |
+| `?model=pie` | (in the URL) use the MPFB Pie model instead of the default |
 | Mouse | Drag to orbit, scroll to zoom |

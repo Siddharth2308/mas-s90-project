@@ -10,6 +10,7 @@
       #controls { position: fixed; right: 12px; bottom: 34px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; max-width: 70vw; }
       #controls button { font: 13px sans-serif; padding: 6px 12px; background: #222; color: #ddd; border: 1px solid #444; border-radius: 6px; cursor: pointer; }
       #controls button:hover { background: #333; }
+      #controls button:disabled { opacity: 0.55; cursor: not-allowed; }
       #controls .evict { border-color: #a35; color: #fbc; }
       #controls .talk { border-color: #3a8; color: #bfe; }
       #controls .talk.on { background: #164; }
@@ -53,11 +54,15 @@
       <button id="ptt" class="talk">🎤 Hold to talk (Space)</button>
       <input id="ask" placeholder="…or type and press Enter" autocomplete="off" />
       <button id="visitor">New visitor (N)</button>
-      <button data-act="pie">🥧 Throw pie (1)</button>
+      <button id="ammo-pie" data-act="pie">🥧 Pie (3/3) (1)</button>
+      <button id="ammo-stone" data-act="stone">🪨 Rock (3/3) (2)</button>
+      <button id="ammo-tomato" data-act="tomato">🍅 Tomato (3/3) (3)</button>
+      <button id="ammo-egg" data-act="egg">🥚 Egg (3/3) (4)</button>
+      <button id="ammo-paint" data-act="paint">🎨 Paint (3/3) (5)</button>
       <button data-act="evict" class="evict">🚀 Evict</button>
       <button data-act="talk">Talk test</button>
       <button id="mic">Mic lip-sync: off</button>
-      <button id="facecam">Face close-up (F)</button>
+      <button id="facecam">Face close-up (C)</button>
       <select id="face-test"><option value="">Test face…</option></select>
       <select id="pose-test"><option value="">Test posture…</option></select>
     </div>

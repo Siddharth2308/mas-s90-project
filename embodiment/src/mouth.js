@@ -64,7 +64,9 @@ export class Mouth {
       head.add(this.mesh);
     }
     this.baseScale = this.mesh.scale.clone(); // attach() compensates for the bone's scale
-    if (this.lips.length) this.mesh.visible = false;
+    // A model with a real face (lip or expression shape keys) doesn't need the LED bar.
+    const realFace = morphMeshes.some((m) => ['Smile', 'Smirk', 'Angry'].some((k) => k in m.morphTargetDictionary));
+    if (this.lips.length || realFace) this.mesh.visible = false;
 
     this.scale = [...VISEMES.rest];
     this.target = [...VISEMES.rest];

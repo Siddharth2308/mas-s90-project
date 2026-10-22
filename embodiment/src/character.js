@@ -5,6 +5,36 @@ import { Mouth } from './mouth.js';
 // Layer 1 = visual effects (mouth, splats, particles...). Rendered, but ignored by hit tests.
 export const FX_LAYER = 1;
 
+// Expression shape keys (blender/make_human.py). Models without some of them just skip those.
+export const EXPRESSIONS = ['Smug', 'Angry', 'Surprised', 'Sad', 'Happy', 'Bored', 'Pain', 'Wince', 'Disgust', 'Contempt', 'Cold', 'Fear'];
+const RESTING = { name: 'Happy', weight: 0.25 }; // a gentle, helpful smile
+// Other models name their face keys differently; drive theirs from ours (e.g. human-realistic-expressions.glb).
+const FACE_ALIASES = { Smile: ['Happy'], Smirk: ['Smug'] };
+
+// Body language, as rotations about world axes (x = his left, y = up, z = toward the visitor).
+const X = new THREE.Vector3(1, 0, 0), Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
+export const POSTURES = {
+  still: [],
+  lean_in: [['Torso', X, 0.1], ['Neck', X, 0.05], ['Head', X, 0.04]],
+  lean_back: [['Torso', X, -0.08], ['Head', X, -0.1]],
+  shrug: [['Clavicle.L', Z, 0.16], ['Clavicle.R', Z, -0.16], ['LowerArm.L', Z, 0.3], ['LowerArm.R', Z, -0.3], ['Head', Z, 0.07]],
+  tilt: [['Head', Z, 0.15], ['Neck', Z, 0.04]],
+  turn_away: [['Torso', Y, 0.16], ['Head', Y, 0.32], ['Head', X, -0.04]],
+  cower: [['Torso', X, 0.12], ['Torso', Y, -0.2], ['Head', Y, -0.3], ['Head', X, 0.12],
+    ['UpperArm.L', X, -0.5], ['UpperArm.R', X, -0.5], ['LowerArm.L', X, -0.9], ['LowerArm.R', X, -0.9]],
+  embrace: [['UpperArm.L', X, -0.55], ['UpperArm.R', X, -0.55], ['UpperArm.L', Z, -0.25], ['UpperArm.R', Z, 0.25],
+    ['LowerArm.L', X, -0.7], ['LowerArm.R', X, -0.7], ['Torso', X, 0.08], ['Head', Z, 0.12]],
+  highfive: [['UpperArm.R', X, -1.75], ['UpperArm.R', Z, -0.2], ['LowerArm.R', X, -0.45], ['Torso', Y, -0.08], ['Head', Z, 0.08]],
+  fistbump: [['UpperArm.R', X, -1.05], ['UpperArm.R', Z, -0.1], ['LowerArm.R', X, -0.35], ['Torso', X, 0.05], ['Torso', Y, -0.1]],
+  slump: [['Abdomen', X, 0.08], ['Torso', X, 0.28], ['Neck', X, 0.2], ['Head', X, 0.35], ['Head', Z, 0.1],
+    ['Clavicle.L', Z, -0.08], ['Clavicle.R', Z, 0.08]],
+};
+// Face for each kind of hit: [quick flash, mood that follows].
+const HIT_FACES = {
+  pie: ['Surprised', 'Angry'], stone: ['Pain', 'Angry'], bat: ['Pain', 'Angry'], smash: ['Wince', 'Pain'],
+  stab: ['Pain', 'Fear'], headbutt: ['Surprised', 'Disgust'],
+};
+
 export function loadCharacter(url, onProgress) {
   return new Promise((resolve, reject) => {
     new GLTFLoader().load(url, (gltf) => resolve(new Character(gltf)), onProgress, reject);
@@ -43,18 +73,38 @@ class Character {
 
     // Face morphs: Angry / Surprised / Sad (+ Smug / Blink and visemes on the human).
     this.faceMeshes = [];
+    this.glowMeshes = [];  // cyborg seams: flicker when glitching, go dark when unplugged
+    this.meshes = [];
     this.root.traverse((o) => {
-      if (o.isMesh && o.morphTargetDictionary) this.faceMeshes.push(o);
-      if (o.isMesh && o.name.startsWith('Cyborg')) o.layers.set(FX_LAYER); // glowing seams: not hit targets
-      if (o.isMesh && o.material.alphaTest > 0) o.material.alphaToCoverage = true; // soft hair/lash edges
+      if (!o.isMesh) return;
+      this.meshes.push(o);
+      if (o.morphTargetDictionary) this.faceMeshes.push(o);
+      if (o.name.startsWith('Cyborg')) { o.layers.set(FX_LAYER); this.glowMeshes.push(o); } // not hit targets
+      if (o.material.alphaTest > 0) o.material.alphaToCoverage = true; // soft hair/lash edges
     });
+    this.height = 4.8;
     this.mouth = new Mouth(head, eyes, this.faceMeshes);
     this.mouth.mesh.layers.set(FX_LAYER);
-    this.face = { Angry: 0, Surprised: 0, Sad: 0, Smug: 0, Blink: 0 };
-    this.faceTarget = { Angry: 0, Surprised: 0, Sad: 0, Smug: 0 };
+    // face = what gets written to the shape keys each frame (eased moods + quick flashes + gaze)
+    this.face = {};
+    this.flashes = {};     // short-lived spikes (Surprised on a hit, brow lifts), decaying to 0
+    this.mood = { ...RESTING };
+    this.moodHold = Infinity; // seconds until he settles back to the resting smirk
     this.angryTimer = 0;
     this.blinkIn = 2 + Math.random() * 3;
     this.blinkT = -1;
+
+    this.posture = 'still';
+    this.postureW = Object.fromEntries(Object.keys(POSTURES).map((k) => [k, 0]));
+
+    // eyes: x > 0 looks to his left, y > 0 looks up; (0, -0.12) is the visitor
+    this.gaze = { x: 0, y: -0.12 };
+    this.gazeTarget = { x: 0, y: -0.12 };
+    this.saccadeIn = 1;
+    this.eyeRollT = -1;
+    this.listening = false;
+    this.speechLevel = 0;
+    this.browCooldown = 0;
 
     // Animation
     this.mixer = new THREE.AnimationMixer(this.root);
@@ -63,7 +113,7 @@ class Character {
     this.idle = Object.entries(this.actions).find(([name]) => name.toLowerCase().includes('idle'))?.[1]
       ?? Object.values(this.actions)[0];
     if (this.idle) this.idle.setEffectiveTimeScale(0.72).play();
-    else this.relaxPose();
+    else if (this.inAPose()) this.relaxPose();
     this.oneShot = null;
     this.mixer.addEventListener('finished', (e) => {
       if (e.action !== this.oneShot) return;
@@ -83,10 +133,15 @@ class Character {
     this.dodgeCooldown = 0;
     this.baseX = this.root.position.x;
     this.evict = null;     // eviction sequence state
-    this.on = {};          // callbacks: launch, land
+    this.glitchT = 0;      // seconds of glitching left
+    this.glitchAmp = 0;
+    this.off = false;      // unplugged: slumped, eyes shut, seams dark
+    this.erase = null;     // delete sequence state
+    this.on = {};          // callbacks: launch, land, cleanup, erased, restored
 
     this.makeRocketFlame();
     this.makeStars();
+    this.makeScanRing();
   }
 
   // three.js drops dots from names and suffixes duplicates ("Torso" -> "Torso_1").
@@ -96,6 +151,8 @@ class Character {
       Neck: ['Neck', 'neck', 'neck_01', 'Skeleton_neck_joint_2', 'Skeleton_neck_joint_1'],
       Torso: ['Torso', 'torso', 'spine_03', 'spine_01', 'Spine2', 'Spine1', 'Spine', 'Skeleton_torso_joint_2', 'Skeleton_torso_joint_1'],
       Abdomen: ['Abdomen', 'pelvis', 'Hips', 'Spine', 'Skeleton_torso_joint_1', 'Skeleton_torso_joint_2'],
+      'Clavicle.L': ['Shoulder.L', 'clavicle_l', 'LeftShoulder'],
+      'Clavicle.R': ['Shoulder.R', 'clavicle_r', 'RightShoulder'],
       'UpperArm.L': ['UpperArm.L', 'upperarm_l', 'LeftArm', 'Skeleton_arm_joint_L__4_', 'Skeleton_arm_joint_L__3_'],
       'UpperArm.R': ['UpperArm.R', 'upperarm_r', 'RightArm', 'Skeleton_arm_joint_R', 'Skeleton_arm_joint_R__2_'],
       'LowerArm.L': ['LowerArm.L', 'lowerarm_l', 'LeftForeArm', 'Skeleton_arm_joint_L__3_', 'Skeleton_arm_joint_L__2_'],
@@ -105,6 +162,14 @@ class Character {
     };
     for (const k of aliases[name] ?? [name.replace(/\./g, '')]) if (this.bones[k]) return this.bones[k];
     return Object.values(this.bones)[0];
+  }
+
+  // Arms held out from the body (hands well above hip height)? Models already standing arms-down skip relaxPose.
+  inAPose() {
+    const hand = this.bone('LowerArm.L')?.getWorldPosition(new THREE.Vector3());
+    const shoulder = this.bone('UpperArm.L')?.getWorldPosition(new THREE.Vector3());
+    if (!hand || !shoulder) return false;
+    return Math.abs(hand.x - shoulder.x) > Math.abs(shoulder.y - hand.y) * 0.5; // elbow swung well out sideways
   }
 
   // No idle animation (e.g. the MPFB human): drop the arms from the A-pose to the sides.
@@ -152,8 +217,144 @@ class Character {
     this.idle?.crossFadeTo(a, 0.2, false);
   }
 
+  // Busy with a sequence (evicted, unplugged, being deleted): nothing else should start.
+  get busy() { return !!(this.evict || this.off || this.erase); }
+
+  // A point on his surface, found by casting a ray at a body part from outside.
+  // part: 'head' | 'face' | 'torso'; from: 'front' | 'left' (his left, the visitor's right).
+  surfacePoint(part, from = 'front') {
+    const top = new THREE.Box3().setFromObject(this.root).max.y;
+    const y = top - this.height * (part === 'torso' ? 0.3 : part === 'face' ? 0.075 : 0.06);
+    const center = this.bone(part === 'torso' ? 'Torso' : 'Head').getWorldPosition(new THREE.Vector3());
+    const origin = from === 'left' ? new THREE.Vector3(center.x + 10, y, center.z + 0.05) : new THREE.Vector3(center.x, y, 10);
+    const dir = from === 'left' ? new THREE.Vector3(-1, 0, 0) : new THREE.Vector3(0, 0, -1);
+    const ray = new THREE.Raycaster(origin, dir); // layer 0 only: body, not seams or splats
+    const hit = ray.intersectObject(this.root, true)[0];
+    return { point: hit ? hit.point : new THREE.Vector3(center.x, y, center.z), dir: dir.clone() };
+  }
+
+  // Kind actions: he softens (or performs softening). The brain decides what he makes of it afterwards.
+  receive(kind) {
+    if (kind === 'hug') this.express('Happy', 'embrace');
+    if (kind === 'flowers') { this.flash('Surprised', 0.6); this.express('Happy', 'tilt'); }
+    if (kind === 'highfive' || kind === 'fistbump') this.express('Happy', kind); // raise the hand to meet theirs
+    if (kind === 'pat') {
+      const head = this.bone('Head');
+      this.jolts.push({ bone: head, axis: new THREE.Vector3(1, 0, 0), amp: 0.12, t: 0 }); // a little dip under the hand
+      this.express('Happy', 'tilt');
+    }
+    this.settle(3.5);
+  }
+
+  // A hard hit from a harm action: a bigger stagger, a pain face and a glitch.
+  strike(point, dir, kind, force = 1.4) {
+    this.hit(point, dir, kind, force);
+    this.glitch(0.45 + force * 0.2, 0.06 * force);
+  }
+
+  // Short burst of digital breakup: jitter, flickering parts and seams.
+  glitch(duration = 0.5, amp = 0.06) {
+    this.glitchT = Math.max(this.glitchT, duration);
+    this.glitchAmp = Math.max(this.glitchAmp, amp);
+  }
+
+  // Unplugged: he slumps, eyes close, the seams go dark. powerUp() reboots him.
+  powerDown() {
+    if (this.busy) return false;
+    this.off = true;
+    this.express(null, 'slump');
+    this.mood = { name: 'Sad', weight: 0.25 };
+    this.glitch(0.3, 0.04);
+    for (const m of this.glowMeshes) m.visible = false;
+    return true;
+  }
+
+  powerUp() {
+    this.off = false;
+    this.glitch(0.8, 0.05);
+    for (const m of this.glowMeshes) m.visible = true;
+    this.flash('Surprised', 0.8);
+    this.express('Cold', 'still');
+    this.settle(5);
+  }
+
+  // Deleted: a scan line wipes him away from the feet up, then he is rebuilt from a "backup".
+  startErase() {
+    if (this.busy) return false;
+    const box = new THREE.Box3().setFromObject(this.root);
+    this.erase = { phase: 'fear', t: 0, bottom: box.min.y - 0.05, top: box.max.y + 0.05 };
+    this.plane ??= new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    this.flash('Fear', 1);
+    this.express('Fear', 'cower');
+    return true;
+  }
+
+  makeScanRing() {
+    const size = new THREE.Box3().setFromObject(this.root).getSize(new THREE.Vector3());
+    const r = Math.max(size.x, size.z) * 0.5;
+    this.scanRing = new THREE.Mesh(
+      new THREE.RingGeometry(r * 0.9, r, 48),
+      new THREE.MeshBasicMaterial({ color: 0x55e6ff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false }),
+    );
+    this.scanRing.rotation.x = -Math.PI / 2;
+    this.scanRing.layers.set(FX_LAYER);
+    this.scanRing.visible = false;
+  }
+
+  updateGlitch(dt) {
+    if (this.glitchT <= 0) return;
+    this.glitchT -= dt;
+    const done = this.glitchT <= 0;
+    const a = this.glitchAmp * (Math.random() < 0.3 ? 1 : 0.25);
+    if (!this.dodge && !this.evict) this.root.position.x = done ? this.baseX : this.baseX + (Math.random() - 0.5) * 2 * a;
+    const drop = !done && Math.random() < 0.3 ? this.meshes[Math.floor(Math.random() * this.meshes.length)] : null;
+    for (const m of this.meshes) m.visible = m !== drop;                       // one part drops out for a frame
+    for (const m of this.glowMeshes) m.visible = !this.off && (done || Math.random() > 0.5);
+    if (done) this.glitchAmp = 0;
+  }
+
+  updateErase(dt) {
+    const e = this.erase;
+    if (!e) return;
+    e.t += dt;
+    const setClip = (on) => { for (const m of this.meshes) { m.material.clippingPlanes = on ? [this.plane] : null; m.material.needsUpdate = true; } };
+    const ring = this.scanRing;
+    const center = this.bone('Torso').getWorldPosition(new THREE.Vector3());
+    if (e.phase === 'fear' && e.t > 0.9) {
+      e.phase = 'wipe'; e.t = 0;
+      setClip(true);
+      this.plane.normal.set(0, 1, 0);           // keep what is above the line
+      ring.visible = true;
+      this.on.eraseStart?.();
+    } else if (e.phase === 'wipe') {
+      const h = e.bottom + (e.top - e.bottom) * Math.min(1, e.t / 1.8);
+      this.plane.constant = -h;
+      ring.position.set(center.x, h, center.z);
+      this.glitch(0.1, 0.03);
+      if (e.t > 1.8) { e.phase = 'gone'; e.t = 0; ring.visible = false; this.root.visible = false; this.on.erased?.(); }
+    } else if (e.phase === 'gone' && e.t > 1.6) {
+      e.phase = 'rebuild'; e.t = 0;
+      this.root.visible = true;
+      this.plane.normal.set(0, -1, 0);          // keep what is below the line, line rises
+      ring.visible = true;
+      this.flash('Fear', 0); this.mood = { name: 'Bored', weight: 0.4 }; this.posture = 'still';
+      this.on.rebuildStart?.();
+    } else if (e.phase === 'rebuild') {
+      const h = e.bottom + (e.top - e.bottom) * Math.min(1, e.t / 1.8);
+      this.plane.constant = h;
+      ring.position.set(center.x, h, center.z);
+      if (e.t > 1.8) {
+        setClip(false);
+        ring.visible = false;
+        this.erase = null;
+        this.flash('Surprised', 0.6);
+        this.on.restored?.();
+      }
+    }
+  }
+
   // Called by the projectile system when something lands on him.
-  hit(point, dir, kind) {
+  hit(point, dir, kind, force = 1) {
     const bone = this.nearestBone(point, ['Head', 'Torso', 'Abdomen', 'UpperArm.L', 'UpperArm.R']);
     if (!bone) return;
     this.hitStreak = this.hitAge < 1.4 ? this.hitStreak + 1 : 1;
@@ -164,15 +365,15 @@ class Character {
     axis.normalize();
     const parentQ = bone.parent.getWorldQuaternion(new THREE.Quaternion()).invert();
     axis.applyQuaternion(parentQ);
-    const force = Math.min(1.6, 1 + (this.hitStreak - 1) * 0.16);
-    this.jolts.push({ bone, axis, amp: (kind === 'stone' ? 0.52 : 0.34) * force, t: 0 });
+    force *= Math.min(1.6, 1 + (this.hitStreak - 1) * 0.16);
+    this.jolts.push({ bone, axis, amp: (kind === 'pie' ? 0.34 : 0.52) * force, t: 0 });
 
     // Spread the impulse through the torso and shoulders for a more physical stagger.
     const torso = this.bone('Torso');
     if (torso && torso !== bone) {
       this.jolts.push({ bone: torso, axis: axis.clone().multiplyScalar(-1), amp: 0.13 * force, t: 0 });
     }
-    if (bone.name === 'Head' || bone.name === 'Torso' || bone.name === 'Abdomen') {
+    if (['Head', 'Torso', 'Abdomen'].some((n) => this.bone(n) === bone)) {
       // Hands come up toward the body after a hit, with a slight side bias.
       for (const [name, side] of [['UpperArm.L', -1], ['UpperArm.R', 1]]) {
         const arm = this.bone(name);
@@ -182,14 +383,20 @@ class Character {
       if (leg) this.jolts.push({ bone: leg, axis: new THREE.Vector3(1, 0, 0), amp: 0.07 * force, t: 0 });
     }
 
-    this.face.Surprised = 1;
-    this.angryTimer = 1.8 + Math.min(1, (this.hitStreak - 1) * 0.2);
+    const [flash, after] = HIT_FACES[kind] ?? HIT_FACES.pie;
+    this.flash(flash, 1);
+    if (after === 'Angry') {
+      this.angryTimer = 1.8 + Math.min(1, (this.hitStreak - 1) * 0.2);
+    } else {
+      this.express(after, null, 0.8);
+      this.settle(3);
+    }
     if (this.hitStreak >= 3) this.playOnce('No');
-    else if (kind !== 'stone' && Math.random() < 0.5) this.playOnce('No');
+    else if (kind === 'pie' && Math.random() < 0.5) this.playOnce('No');
   }
 
   tryDodge(side) {
-    if (this.evict || this.dodge || this.dodgeCooldown > 0) return false;
+    if (this.busy || this.dodge || this.dodgeCooldown > 0) return false;
     this.dodge = { side: side < 0 ? -1 : 1, t: 0 };
     this.dodgeCooldown = 1.15;
     const torso = this.bone('Torso');
@@ -202,16 +409,37 @@ class Character {
     return true;
   }
 
-  // Eye-roll while he "thinks" about your question.
-  annoyed(t = 1.5) {
-    this.angryTimer = Math.max(this.angryTimer, t);
+  // While he "thinks" about your question: a glance up and to the side.
+  thinking() {
+    this.gazeTarget = { x: 0.35, y: 0.3 };
+    this.saccadeIn = 0.9;
+  }
+
+  // Set his expression and/or posture (null keeps the current one). Holds until settle().
+  express(name, posture, weight = 1) {
+    if (name && EXPRESSIONS.includes(name)) this.mood = { name, weight };
+    if (posture && POSTURES[posture]) this.posture = posture;
+    this.moodHold = Infinity;
+  }
+
+  // Back to the resting smirk and neutral stance after `delay` seconds.
+  settle(delay = 2.5) { this.moodHold = Math.min(this.moodHold, delay); }
+
+  flash(name, amount) { this.flashes[name] = Math.max(this.flashes[name] ?? 0, amount); }
+
+  eyeRoll() { this.eyeRollT = 0; }
+
+  setListening(on) {
+    this.listening = on;
+    this.gazeTarget = { x: 0, y: -0.12 };
   }
 
   startEvict() {
-    if (this.evict) return false;
+    if (this.busy) return false;
     if (this.oneShot) { this.oneShot.stop(); this.oneShot = null; this.idle?.reset().play(); }
     this.evict = { phase: 'crouch', t: 0, vy: 0, spin: 0 };
-    this.face.Surprised = 1;
+    this.flash('Surprised', 0.5);
+    this.flash('Fear', 1);
     return true;
   }
 
@@ -284,7 +512,7 @@ class Character {
         r.position.y = 0;
         e.phase = 'land'; e.t = 0;
         this.jolts.push({ bone: this.bone('Torso') ?? this.root, axis: new THREE.Vector3(1, 0, 0), amp: 0.25, t: 0 });
-        this.face.Surprised = 1;
+        this.flash('Surprised', 1);
         this.angryTimer = 2;
         this.on.land?.();
       }
@@ -323,6 +551,8 @@ class Character {
 
     this.mixer.update(dt);
     this.updateEvict(dt);
+    this.updateErase(dt);
+    this.updateGlitch(dt);
 
     // springy jolts: quick kick away from the impact, then wobble back
     const q = new THREE.Quaternion();
@@ -353,22 +583,71 @@ class Character {
     addIdleOffset(this.bone('Head'), new THREE.Vector3(1, 0, 0), Math.sin(this.elapsed * 5) * speaking * 0.012);
     addIdleOffset(this.bone('UpperArm.L'), new THREE.Vector3(1, 0, 0), breathe * 0.006);
     addIdleOffset(this.bone('UpperArm.R'), new THREE.Vector3(1, 0, 0), -breathe * 0.006);
+    this.updatePosture(dt, addIdleOffset);
+    this.updateFace(dt);
+    this.mouth.update(dt);
+  }
 
-    // face: surprised on impact, then angry for a bit
+  // Blend toward the current posture; offsets are world-axis rotations converted to each bone's parent space.
+  updatePosture(dt, addOffset) {
+    const parentQ = new THREE.Quaternion();
+    for (const [name, steps] of Object.entries(POSTURES)) {
+      const w = this.postureW[name] += ((name === this.posture ? 1 : 0) - this.postureW[name]) * Math.min(1, dt * 3);
+      if (w < 0.001) continue;
+      for (const [boneName, axis, angle] of steps) {
+        const bone = this.bone(boneName);
+        if (!bone?.parent) continue;
+        bone.parent.getWorldQuaternion(parentQ).invert();
+        addOffset(bone, axis.clone().applyQuaternion(parentQ), angle * w);
+      }
+    }
+  }
+
+  updateFace(dt) {
+    const ease = (k, rate) => Math.min(1, dt * rate);
+
+    // expression: the chosen mood, overridden by anger for a moment after a hit
+    this.moodHold -= dt;
+    if (this.moodHold <= 0 && !this.off) { this.mood = { ...RESTING }; this.posture = 'still'; this.moodHold = Infinity; }
     this.angryTimer = Math.max(0, this.angryTimer - dt);
-    this.faceTarget.Angry = this.angryTimer > 0 ? 0.9 : 0;
-    this.faceTarget.Smug = this.angryTimer > 0 ? 0 : 0.35; // resting smirk
-    this.face.Surprised = Math.max(0, this.face.Surprised - dt * 2.5);
-    this.face.Angry += (this.faceTarget.Angry - this.face.Angry) * Math.min(1, dt * 6);
-    this.face.Smug += (this.faceTarget.Smug - this.face.Smug) * Math.min(1, dt * 3);
+    const angry = this.angryTimer > 0;
+    for (const name of EXPRESSIONS) {
+      let target = name === this.mood.name ? this.mood.weight * (angry ? 0.25 : 1) : 0;
+      if (name === 'Angry' && angry) target = 0.9;
+      this.face[name] = (this.face[name] ?? 0) + (target - (this.face[name] ?? 0)) * ease(dt, 4);
+    }
+
+    // brow lift when a new word starts (speech level jumps)
+    const level = this.mouth.scale[1];
+    this.browCooldown -= dt;
+    if (level - this.speechLevel > 0.22 && this.browCooldown <= 0 && Math.random() < 0.5) {
+      this.flash('browOuterUpLeft', 0.5); this.flash('browOuterUpRight', 0.45); this.flash('browInnerUp', 0.25);
+      this.browCooldown = 0.7;
+    }
+    this.speechLevel += (level - this.speechLevel) * ease(dt, 10);
+    for (const b of ['browOuterUpLeft', 'browOuterUpRight', 'browInnerUp']) this.face[b] = 0;
+    if (this.listening) this.face.browOuterUpLeft = 0.3; // skeptical while you talk
+
+    // quick spikes on top
+    for (const [name, v] of Object.entries(this.flashes)) {
+      this.face[name] = Math.min(1, Math.max(this.face[name] ?? 0, v));
+      this.flashes[name] = Math.max(0, v - dt * (name.startsWith('brow') ? 1.6 : 2.2));
+    }
+
+    this.updateGaze(dt);
 
     // blink every few seconds (0.16 s close-open)
     this.blinkIn -= dt;
     if (this.blinkIn <= 0) { this.blinkT = 0; this.blinkIn = 2 + Math.random() * 4; }
+    this.face.Blink = 0;
     if (this.blinkT >= 0) {
       this.blinkT += dt;
       this.face.Blink = Math.sin(Math.min(1, this.blinkT / 0.16) * Math.PI);
-      if (this.blinkT > 0.16) { this.blinkT = -1; this.face.Blink = 0; }
+      if (this.blinkT > 0.16) this.blinkT = -1;
+    }
+    if (this.off) this.face.Blink = 1; // unplugged: eyes shut
+    for (const [name, sources] of Object.entries(FACE_ALIASES)) {
+      this.face[name] = Math.max(...sources.map((s) => this.face[s] ?? 0));
     }
     for (const mesh of this.faceMeshes) {
       for (const [name, v] of Object.entries(this.face)) {
@@ -376,8 +655,31 @@ class Character {
         if (i !== undefined) mesh.morphTargetInfluences[i] = v;
       }
     }
+  }
 
-    this.mouth.update(dt);
+  // Eye contact with small darting glances; a slow sweep up and over for an eye-roll.
+  updateGaze(dt) {
+    const g = this.gaze;
+    if (this.eyeRollT >= 0) {
+      this.eyeRollT += dt;
+      const k = Math.min(1, this.eyeRollT / 0.9);
+      const a = Math.PI * (1 - k);                 // sweep from one side, over the top, to the other
+      this.gazeTarget = { x: Math.cos(a) * 0.6, y: Math.sin(a) * 0.9 + 0.1 };
+      if (k >= 1) { this.eyeRollT = -1; this.gazeTarget = { x: 0, y: -0.12 }; }
+    } else if ((this.saccadeIn -= dt) <= 0) {
+      const away = !this.listening && this.mouth.scale[1] < 0.2 && Math.random() < 0.25;
+      const r = away ? 0.5 : 0.08;                 // mostly eye contact, sometimes a glance away
+      this.gazeTarget = { x: (Math.random() - 0.5) * 2 * r, y: -0.12 + (Math.random() - 0.5) * r };
+      this.saccadeIn = away ? 0.6 + Math.random() * 0.8 : 0.4 + Math.random() * 1.8;
+    }
+    const k = Math.min(1, dt * (this.eyeRollT >= 0 ? 8 : 25)); // saccades are fast
+    g.x += (this.gazeTarget.x - g.x) * k;
+    g.y += (this.gazeTarget.y - g.y) * k;
+    const f = this.face, pos = (v) => Math.max(0, v);
+    f.eyeLookOutLeft = f.eyeLookInRight = pos(g.x);  // looking to his left
+    f.eyeLookInLeft = f.eyeLookOutRight = pos(-g.x);
+    f.eyeLookUpLeft = f.eyeLookUpRight = pos(g.y);
+    f.eyeLookDownLeft = f.eyeLookDownRight = pos(-g.y);
   }
 
   updateDodge(dt) {

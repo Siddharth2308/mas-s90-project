@@ -13,6 +13,23 @@
       #controls .evict { border-color: #a35; color: #fbc; }
       #controls .talk { border-color: #3a8; color: #bfe; }
       #controls .talk.on { background: #164; }
+      #controls .harm { border-color: #a63; color: #fdc; }
+      #controls .repair { border-color: #3a8; color: #cfe; }
+      #controls .kind { border-color: #c69; color: #fde; }
+      /* the tradeoff card stays visible in booth mode: it is part of the piece */
+      #tradeoff { position: fixed; left: 50%; top: 18%; transform: translate(-50%, -8px); width: min(460px, 86vw); padding: 14px 18px;
+        background: rgba(8, 14, 18, 0.88); border: 1px solid #2c6f80; border-radius: 8px; color: #cfe; font: 14px/1.45 sans-serif;
+        opacity: 0; transition: opacity 0.4s, transform 0.4s; pointer-events: none; }
+      #tradeoff.on { opacity: 1; transform: translate(-50%, 0); }
+      #tradeoff h2 { margin: 0 0 6px; font: 600 11px/1 sans-serif; letter-spacing: 0.18em; color: #55e6ff; }
+      #tradeoff .chose { color: #fff; font-weight: 600; }
+      #tradeoff b { color: #8fb; font-weight: 600; }
+      #tradeoff .costline b { color: #f98; }
+      #ledger { position: fixed; left: 0; right: 0; top: 44px; text-align: center; padding: 0 16px; color: #e98; font: 13px sans-serif; }
+      #flash { position: fixed; inset: 0; background: radial-gradient(circle, rgba(255,255,255,0.85), rgba(255,60,40,0.55)); opacity: 0; pointer-events: none; }
+      #flash.on { animation: flash 0.6s ease-out; }
+      @keyframes flash { 0% { opacity: 1; } 100% { opacity: 0; } }
+      #controls select { font: 13px sans-serif; padding: 6px 8px; background: #222; color: #ddd; border: 1px solid #444; border-radius: 6px; }
       #controls input { font: 13px sans-serif; padding: 6px 10px; background: #111; color: #ddd; border: 1px solid #444; border-radius: 6px; width: 220px; }
       #caption { position: fixed; left: 0; right: 0; top: 16px; padding: 0 16px; text-align: center; color: #bbb; font: 16px sans-serif; }
       #caption.heard { color: #7c9; font-style: italic; }
@@ -22,6 +39,14 @@
   </head>
   <body>
     <div id="caption"></div>
+    <div id="tradeoff">
+      <h2>TRADEOFF</h2>
+      <div class="chose"></div>
+      <div><b>You got:</b> <span class="got"></span></div>
+      <div class="costline"><b>It cost:</b> <span class="cost"></span></div>
+    </div>
+    <div id="ledger"></div>
+    <div id="flash"></div>
     <div id="brain"></div>
     <div id="status">Loading character…</div>
     <div id="controls">
@@ -32,6 +57,9 @@
       <button data-act="evict" class="evict">🚀 Evict</button>
       <button data-act="talk">Talk test</button>
       <button id="mic">Mic lip-sync: off</button>
+      <button id="facecam">Face close-up (F)</button>
+      <select id="face-test"><option value="">Test face…</option></select>
+      <select id="pose-test"><option value="">Test posture…</option></select>
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>

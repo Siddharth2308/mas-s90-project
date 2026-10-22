@@ -128,8 +128,9 @@ export class Speaker {
     }
   }
 
-  enqueue(text) {
-    this.queue.push({ text, audio: this.fetchAudio(text) }); // starts synthesizing now
+  // onStart runs when this line starts playing (e.g. to change his face mid-reply).
+  enqueue(text, onStart) {
+    this.queue.push({ text, onStart, audio: this.fetchAudio(text) }); // starts synthesizing now
     if (!this.busy) this.play(this.gen);
   }
 
@@ -141,6 +142,7 @@ export class Speaker {
       const item = this.queue.shift();
       const buffer = await item.audio;
       if (gen !== this.gen) return;
+      item.onStart?.();
       if (buffer) await this.playBuffer(buffer);
       else await this.browserSay(item.text);
     }

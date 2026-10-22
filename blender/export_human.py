@@ -15,6 +15,11 @@ OUT = HERE.parent / 'embodiment/public/models/pie.glb'
 # Shape keys the app uses (character.js / mouth.js). Everything else is dropped to keep the file small.
 KEEP = {
     'Angry', 'Surprised', 'Sad', 'Smug', 'Happy', 'Bored', 'Blink', 'MouthOpen',
+    'Pain', 'Wince', 'Disgust', 'Contempt', 'Cold', 'Fear',
+    # gaze (the rig has no eye bones) and brows for speech emphasis
+    'eyeLookUpLeft', 'eyeLookUpRight', 'eyeLookDownLeft', 'eyeLookDownRight',
+    'eyeLookInLeft', 'eyeLookInRight', 'eyeLookOutLeft', 'eyeLookOutRight',
+    'browInnerUp', 'browOuterUpLeft', 'browOuterUpRight',
     'aa_02', 'aa_ah_ax_01', 'ao_03', 'aw_09', 'ay_11', 'd_t_n_19', 'er_05', 'ey_eh_uh_04', 'f_v_18',
     'h_12', 'k_g_ng_20', 'l_14', 'ow_08', 'oy_10', 'p_b_m_21', 'r_13', 'sh_ch_jh_zh_16', 'sil_00',
     's_z_15', 'th_dh_17', 'w_uw_07', 'y_iy_ih_ix_06',

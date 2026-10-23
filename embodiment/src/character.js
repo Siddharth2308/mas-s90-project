@@ -31,6 +31,52 @@ export const POSTURES = {
   slump: [['Abdomen', X, 0.08], ['Torso', X, 0.28], ['Neck', X, 0.2], ['Head', X, 0.35], ['Head', Z, 0.1],
     ['Clavicle.L', Z, -0.08], ['Clavicle.R', Z, 0.08]],
 };
+
+function restyleOutfit(material) {
+  if (material.userData.outfitStyled) return;
+  const source = material.map?.image;
+  if (!source || typeof document === 'undefined') return;
+  const canvas = document.createElement('canvas');
+  canvas.width = source.width;
+  canvas.height = source.height;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return;
+  ctx.drawImage(source, 0, 0);
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const { data, width, height } = image;
+  // The MakeHuman casual outfit packs shirt UVs around the outside and denim in the center.
+  // Lift the shirt into a soft teal and give the jeans a cleaner indigo while retaining fabric detail.
+  const grade = (u0, v0, u1, v1, gain) => {
+    for (let y = Math.floor(v0 * height); y < Math.ceil(v1 * height); y++) {
+      for (let x = Math.floor(u0 * width); x < Math.ceil(u1 * width); x++) {
+        const i = (y * width + x) * 4;
+        data[i] = Math.min(255, data[i] * gain[0]);
+        data[i + 1] = Math.min(255, data[i + 1] * gain[1]);
+        data[i + 2] = Math.min(255, data[i + 2] * gain[2]);
+      }
+    }
+  };
+  grade(0, 0.30, 0.36, 1, [1.6, 1.55, 1.4]);
+  grade(0.70, 0.18, 0.97, 0.52, [1.6, 1.55, 1.4]);
+  grade(0.70, 0.68, 0.97, 0.98, [1.6, 1.55, 1.4]);
+  grade(0.36, 0, 0.71, 0.98, [0.95, 1.08, 1.45]);
+  ctx.putImageData(image, 0, 0);
+
+  const map = new THREE.CanvasTexture(canvas);
+  map.colorSpace = material.map.colorSpace;
+  map.flipY = material.map.flipY;
+  map.channel = material.map.channel;
+  map.wrapS = material.map.wrapS;
+  map.wrapT = material.map.wrapT;
+  map.repeat.copy(material.map.repeat);
+  map.offset.copy(material.map.offset);
+  map.rotation = material.map.rotation;
+  map.center.copy(material.map.center);
+  material.map = map;
+  material.userData.outfitStyled = true;
+  material.needsUpdate = true;
+}
+
 // Face for each kind of hit: [quick flash, mood that follows].
 const HIT_FACES = {
   pie: ['Surprised', 'Angry'], stone: ['Pain', 'Angry'], bat: ['Pain', 'Angry'], smash: ['Wince', 'Pain'],
@@ -83,7 +129,11 @@ class Character {
       this.meshes.push(o);
       if (o.morphTargetDictionary) this.faceMeshes.push(o);
       if (o.name.startsWith('Cyborg')) { o.layers.set(FX_LAYER); this.glowMeshes.push(o); } // not hit targets
-      if (o.material.alphaTest > 0) o.material.alphaToCoverage = true; // soft hair/lash edges
+      const materials = Array.isArray(o.material) ? o.material : [o.material];
+      for (const material of materials) {
+        if (material.name.toLowerCase().includes('casualsuit')) restyleOutfit(material);
+        if (material.alphaTest > 0) material.alphaToCoverage = true; // soft hair/lash edges
+      }
     });
     this.height = 4.8;
     this.mouth = new Mouth(head, eyes, this.faceMeshes);

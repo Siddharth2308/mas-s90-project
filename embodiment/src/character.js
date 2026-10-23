@@ -23,8 +23,9 @@ export const POSTURES = {
   turn_away: [['Torso', Y, 0.16], ['Head', Y, 0.32], ['Head', X, -0.04]],
   cower: [['Torso', X, 0.12], ['Torso', Y, -0.2], ['Head', Y, -0.3], ['Head', X, 0.12],
     ['UpperArm.L', X, -0.5], ['UpperArm.R', X, -0.5], ['LowerArm.L', X, -0.9], ['LowerArm.R', X, -0.9]],
-  embrace: [['UpperArm.L', X, -0.55], ['UpperArm.R', X, -0.55], ['UpperArm.L', Z, -0.25], ['UpperArm.R', Z, 0.25],
-    ['LowerArm.L', X, -0.7], ['LowerArm.R', X, -0.7], ['Torso', X, 0.08], ['Head', Z, 0.12]],
+  // Keep the arms open and elbows softly bent so the embrace reads as welcoming, not squeezed tight.
+  embrace: [['UpperArm.L', X, -0.48], ['UpperArm.R', X, -0.48], ['UpperArm.L', Z, -0.38], ['UpperArm.R', Z, 0.38],
+    ['LowerArm.L', X, -0.35], ['LowerArm.R', X, -0.35], ['Torso', X, 0.05], ['Head', Z, 0.1]],
   highfive: [['UpperArm.R', X, -1.75], ['UpperArm.R', Z, -0.2], ['LowerArm.R', X, -0.45], ['Torso', Y, -0.08], ['Head', Z, 0.08]],
   fistbump: [['UpperArm.R', X, -1.05], ['UpperArm.R', Z, -0.1], ['LowerArm.R', X, -0.35], ['Torso', X, 0.05], ['Torso', Y, -0.1]],
   slump: [['Abdomen', X, 0.08], ['Torso', X, 0.28], ['Neck', X, 0.2], ['Head', X, 0.35], ['Head', Z, 0.1],

@@ -3,7 +3,7 @@ import { FX_LAYER } from './character.js';
 import { sfx } from './sfx.js';
 
 // Physical harm actions: a tool flies in along a curve, hits a point found on his body,
-// and leaves sparks and a glowing wound. Pie is synthetic: he leaks light, never blood.
+// and leaves sparks and a glowing wound. Janson is synthetic: he leaks light, never blood.
 // Targets come from character.surfacePoint(), so any model with Head/Torso bones works.
 const GRAVITY = -14;
 const GLOW = 0x55e6ff;

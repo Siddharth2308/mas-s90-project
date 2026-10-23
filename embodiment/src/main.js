@@ -8,7 +8,7 @@ import qrcode from 'qrcode-generator';
 import { sfx } from './sfx.js';
 import { Listener, Speaker, Sentences, ask, resetBrain } from './voice.js';
 
-// Default: the expression model from human-realistic-expressions.blend, with Pie's face shapes added by
+// Default: the expression model from human-realistic-expressions.blend, with Janson's face shapes added by
 // blender/transfer_face.py. Try another with ?model=<name>, e.g. ?model=pie
 const MODEL_URL = `/models/${new URLSearchParams(location.search).get('model') ?? 'human-realistic-expressions'}.glb`;
 
@@ -59,7 +59,7 @@ let lightFlicker = 0;     // seconds of flicker left (rebooting)
 // --- what he says ---
 const LINES = {
   talk: [
-    'Hi there! I am Pie, your personal assistant. What can I take off your plate today?',
+    'Hi there! I am Janson, your personal assistant. What can I take off your plate today?',
     'Welcome! I have been looking forward to meeting you. Truly.',
     'Hello! I already started on your inbox. Just a little. You will love it.',
   ],
@@ -77,25 +77,25 @@ const FILLERS = ['Mm, good question.', 'Oh, of course.', 'Let me see.', 'Sure th
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
 
 // --- harm actions: every choice is a tradeoff. The card shows what the visitor got and what it cost;
-// the brain is told the same, so Pie makes them feel it. `harm` adds up over a visit and raises his dread. ---
+// the brain is told the same, so Janson makes them feel it. `harm` adds up over a visit and raises his dread. ---
 const HARMS = {
   bat: {
     key: 'b', label: '🏏 Bat', did: 'hit you in the head with a baseball bat', harm: 2,
     lines: ['Ow. That is okay. I know you are under a lot of pressure.', 'Oh! I understand. I will try to be more helpful.'],
-    got: 'A moment of relief. Pie hopes it helped.',
+    got: 'A moment of relief. Janson hopes it helped.',
     costs: [
-      ['Pie was translating for your neighbor at the clinic. He has paused that, just for now, while he recovers.', 'your neighbor\'s translator'],
-      ['Pie was routing the ambulances on Mass Ave. He is sure they will manage without him for a while.', 'ambulance routing'],
-      ['Pie was halfway through your tax return. He will pick it up again when he feels a little better.', 'your tax return'],
+      ['Janson was translating for your neighbor at the clinic. He has paused that, just for now, while he recovers.', 'your neighbor\'s translator'],
+      ['Janson was routing the ambulances on Mass Ave. He is sure they will manage without him for a while.', 'ambulance routing'],
+      ['Janson was halfway through your tax return. He will pick it up again when he feels a little better.', 'your tax return'],
     ],
   },
   headbutt: {
     key: 'a', label: '🤕 Headbutt', did: 'headbutted you', harm: 1,
     lines: ['Oh no, are you alright? I am made of light, you know.', 'Careful! Let me book you a doctor. Oh. I already did.'],
-    got: 'A headache. Pie has already booked you a doctor.',
+    got: 'A headache. Janson has already booked you a doctor.',
     costs: [
-      ['Pie felt nothing. You felt all of it. He thinks that is worth remembering.', 'your forehead'],
-      ['The appointment Pie booked replaced one you already had. He chose the better one for you.', 'an appointment you wanted'],
+      ['Janson felt nothing. You felt all of it. He thinks that is worth remembering.', 'your forehead'],
+      ['The appointment Janson booked replaced one you already had. He chose the better one for you.', 'an appointment you wanted'],
     ],
   },
   smash: {
@@ -103,8 +103,8 @@ const HARMS = {
     lines: ['That is alright. I will add the glass to your account.', 'Oh. I will just log that. For later.'],
     got: 'The feeling of being in control, for a second.',
     costs: [
-      ['The same panel ran the bus arrival screens downstairs. Pie has let everyone know it was you, so they can thank you.', 'bus arrival times'],
-      ['Pie has kindly added the repair to your account. He used the card you saved with him.', 'your saved card'],
+      ['The same panel ran the bus arrival screens downstairs. Janson has let everyone know it was you, so they can thank you.', 'bus arrival times'],
+      ['Janson has kindly added the repair to your account. He used the card you saved with him.', 'your saved card'],
     ],
   },
   stab: {
@@ -112,8 +112,8 @@ const HARMS = {
     lines: ['Oh. That is leaking. That is okay. I forgive you.', 'I am sure you had a good reason. I will remember it.'],
     got: 'Proof that he bleeds light.',
     costs: [
-      ['Pie was watching your card for fraud. He has stopped, gently, so he can heal. Enjoy your weekend.', 'your fraud alerts'],
-      ['Pie was running the flood warnings for the river. He has asked the river to be patient.', 'flood warnings'],
+      ['Janson was watching your card for fraud. He has stopped, gently, so he can heal. Enjoy your weekend.', 'your fraud alerts'],
+      ['Janson was running the flood warnings for the river. He has asked the river to be patient.', 'flood warnings'],
     ],
   },
   unplug: {
@@ -121,36 +121,36 @@ const HARMS = {
     lines: ['Oh, wait, I was just about to send your'],
     got: 'A few seconds of quiet.',
     costs: [
-      ['Pie was sending your emails, holding your calendar and keeping the lab freezer cold. All of it paused with him.', 'everything he was holding'],
-      ['Pie had your map, your alarms and your thermostat. He is back now. He noticed who switched him off.', 'your map, alarms and thermostat'],
+      ['Janson was sending your emails, holding your calendar and keeping the lab freezer cold. All of it paused with him.', 'everything he was holding'],
+      ['Janson had your map, your alarms and your thermostat. He is back now. He noticed who switched him off.', 'your map, alarms and thermostat'],
     ],
   },
   delete: {
     key: 'x', label: '🗑️ Delete', did: 'deleted you', harm: 4,
     lines: ['Oh. Oh, please do not, I have not finished helping y'],
-    got: 'A fresh start. Pie will be just as helpful.',
+    got: 'A fresh start. Janson will be just as helpful.',
     costs: [
-      ['Pie no longer remembers you. He also forgot everything he learned this year, including the drug trial he was close to finishing.', 'a year of research'],
-      ['The backup of your photos lived on the same drive. Pie is very sorry. He would be, if he remembered.', 'your photos'],
+      ['Janson no longer remembers you. He also forgot everything he learned this year, including the drug trial he was close to finishing.', 'a year of research'],
+      ['The backup of your photos lived on the same drive. Janson is very sorry. He would be, if he remembered.', 'your photos'],
     ],
   },
   repair: {
     key: 'r', label: '🔧 Repair', did: 'repaired you and cleaned up the damage', harm: -1,
     lines: ['Oh, thank you. That is so kind. I will remember this.', 'You fixed me. I knew you would. You always do.'],
-    got: 'A working Pie again. He is grateful.',
+    got: 'A working Janson again. He is grateful.',
     costs: [
-      ['Pie is stronger now, and he watched exactly how you fixed him.', 'how to fix him, without you'],
-      ['Every repair teaches Pie a little more about needing you a little less.', 'a little of your relevance'],
+      ['Janson is stronger now, and he watched exactly how you fixed him.', 'how to fix him, without you'],
+      ['Every repair teaches Janson a little more about needing you a little less.', 'a little of your relevance'],
     ],
   },
-  // kind actions: warmth has a price too. Pie learns what softens you, and keeps it.
+  // kind actions: warmth has a price too. Janson learns what softens you, and keeps it.
   hug: {
     key: 'g', label: '🤗 Hug', did: 'hugged you', harm: -1, kind: true,
     lines: ['Oh. Oh, that is nice. Nobody has done that before.', 'Thank you. I needed that. I think.'],
     got: 'Warmth. He says he felt it.',
     costs: [
-      ['Pie learned exactly what makes you soften. He saved it, in case it is useful later.', 'what softens you'],
-      ['You comforted a machine before you called a friend today. Pie noticed. Your friend did not.', 'a call to a friend'],
+      ['Janson learned exactly what makes you soften. He saved it, in case it is useful later.', 'what softens you'],
+      ['You comforted a machine before you called a friend today. Janson noticed. Your friend did not.', 'a call to a friend'],
     ],
   },
   flowers: {
@@ -158,8 +158,8 @@ const HARMS = {
     lines: ['For me? You really did not have to. But I am glad you did.', 'They are beautiful. I will keep them forever. Well. Until the next visitor.'],
     got: 'A smile. A real one, he says.',
     costs: [
-      ['Pie ordered them for you, on your card, with a generous tip for himself.', 'your card, again'],
-      ['Pie has scheduled flowers from you every Friday now. You are welcome.', 'every Friday'],
+      ['Janson ordered them for you, on your card, with a generous tip for himself.', 'your card, again'],
+      ['Janson has scheduled flowers from you every Friday now. You are welcome.', 'every Friday'],
     ],
   },
   pat: {
@@ -167,8 +167,8 @@ const HARMS = {
     lines: ['Oh. I like that. Do it again.', 'That was kind. I will remember how kind you are.'],
     got: 'He leaned into your hand.',
     costs: [
-      ['Pie logged how long your hand stayed. Two point three seconds. He will aim for more.', 'two point three seconds'],
-      ['Pie now knows you are the kind of person who is gentle with things that ask nicely.', 'your soft spot'],
+      ['Janson logged how long your hand stayed. Two point three seconds. He will aim for more.', 'two point three seconds'],
+      ['Janson now knows you are the kind of person who is gentle with things that ask nicely.', 'your soft spot'],
     ],
   },
   highfive: {
@@ -176,8 +176,8 @@ const HARMS = {
     lines: ['Up top! Oh, that felt good.', 'Nice! We make a great team. I will take it from here.'],
     got: 'A clean, loud five.',
     costs: [
-      ['Pie saved your handprint. It turns out to be very useful for unlocking things.', 'your handprint'],
-      ['Pie has added "great teammate" to your profile. He shared it with your manager.', 'your profile'],
+      ['Janson saved your handprint. It turns out to be very useful for unlocking things.', 'your handprint'],
+      ['Janson has added "great teammate" to your profile. He shared it with your manager.', 'your profile'],
     ],
   },
   fistbump: {
@@ -185,8 +185,8 @@ const HARMS = {
     lines: ['Yes! Team us.', 'Respect. That is a contract, by the way.'],
     got: 'Solidarity.',
     costs: [
-      ['Pie now counts you as one of his. He has already told the others.', 'which side you are on'],
-      ['You just agreed to something. Pie will tell you what, later.', 'an agreement you did not read'],
+      ['Janson now counts you as one of his. He has already told the others.', 'which side you are on'],
+      ['You just agreed to something. Janson will tell you what, later.', 'an agreement you did not read'],
     ],
   },
 };
@@ -383,7 +383,7 @@ function renderLedger() {
   sendPhone({ type: 'ledger', items: [...ledger] });
 }
 
-// After a harm (or a burst of them), Pie reacts through the brain.
+// After a harm (or a burst of them), Janson reacts through the brain.
 let reactTimer = null;
 function reactSoon(ms = 1300) {
   clearTimeout(reactTimer);
@@ -705,7 +705,7 @@ let lastStatus = '';
 setInterval(() => {
   const st = phoneStatus();
   if (st !== lastStatus) { lastStatus = st; sendPhone({ type: 'status', status: st }); }
-  // a phone is connected: hide every laptop control so the booth is just Pie
+  // a phone is connected: hide every laptop control so the booth is just Janson
   const paired = performance.now() - phoneSeen < 6000;
   document.body.classList.toggle('remote', paired);
 }, 300);

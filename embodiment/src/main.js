@@ -3,6 +3,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { loadCharacter, FX_LAYER, EXPRESSIONS, POSTURES } from './character.js';
 import { Thrower } from './projectiles.js';
 import { Harm } from './harm.js';
+import { FIDGET_NAMES } from './npc.js';
+import qrcode from 'qrcode-generator';
 import { sfx } from './sfx.js';
 import { Listener, Speaker, Sentences, ask, resetBrain } from './voice.js';
 
@@ -372,11 +374,13 @@ function showTradeoff(spec, cost) {
   card.querySelector('.got').textContent = spec.got;
   card.querySelector('.cost').textContent = cost;
   card.classList.add('on');
+  sendPhone({ type: 'card', chose: card.querySelector('.chose').textContent, got: spec.got, cost, kind: !!spec.kind || spec.harm < 0 });
   clearTimeout(cardTimer);
   cardTimer = setTimeout(() => card.classList.remove('on'), 8000);
 }
 function renderLedger() {
   ledgerEl.textContent = ledger.length ? `What your choices have cost so far: ${ledger.join(' · ')}` : '';
+  sendPhone({ type: 'ledger', items: [...ledger] });
 }
 
 // After a harm (or a burst of them), Pie reacts through the brain.
@@ -389,7 +393,7 @@ function reactSoon(ms = 1300) {
   }, ms);
 }
 
-async function doHarm(name) {
+async function doHarm(name, strength = 1) {
   const spec = HARMS[name];
   if (!character || character.busy || harm.lunge || harm.moves.length) return;
   cancelLull();
@@ -451,7 +455,7 @@ async function doHarm(name) {
   }
   // physical strikes
   convId++; speaker.stop();
-  await harm.strike(name);
+  await harm.strike(name, strength);
   say(pick(spec.lines));
   showTradeoff(spec, cost);
   renderLedger();
@@ -483,6 +487,8 @@ loadCharacter(MODEL_URL, (p) => {
     if (cooldown > 0) button.textContent = `${item.label} (${charges}/${capacity}) · ${Math.ceil(cooldown)}s`;
     else if (charges === 0) button.textContent = `${item.label} · refill ${Math.ceil(recharge)}s`;
     else button.textContent = `${item.label} (${charges}/${capacity}) (${item.key})`;
+    ammoState[kind] = { charges, capacity, cooldown: Math.ceil(cooldown), recharge: Math.ceil(recharge) };
+    sendPhone({ type: 'ammo', kind, ...ammoState[kind] });
   };
   thrower.refreshAmmo();
   thrower.on.hit = (kind) => {
@@ -503,9 +509,9 @@ loadCharacter(MODEL_URL, (p) => {
 
   scene.add(c.scanRing);
   harm = new Harm(scene, camera, c);
-  harm.on.impact = (kind) => {
+  harm.on.impact = (kind, strength = 1) => {
     hitStop = 0.08;
-    shake = kind === 'headbutt' ? 0.35 : 0.18;
+    shake = (kind === 'headbutt' ? 0.35 : 0.18) * strength;
     if (kind === 'headbutt') { flashEl.classList.remove('on'); void flashEl.offsetWidth; flashEl.classList.add('on'); }
   };
   // delete: the wipe really erases his memory of this visitor (fresh brain), but the "logs" remember
@@ -538,7 +544,7 @@ loadCharacter(MODEL_URL, (p) => {
 });
 
 // --- buttons + keyboard ---
-function act(name) {
+function act(name, strength = 1) {
   cancelLull(); // they are busy throwing things, not drifting away
   if (!character) return;
   if (name === 'talk') {
@@ -550,7 +556,7 @@ function act(name) {
     return;
   }
   if (character.busy) return; // nothing to hit while he's in space, unplugged or deleted
-  if (HARMS[name]) return doHarm(name);
+  if (HARMS[name]) return doHarm(name, strength);
   thrower.throw(name);
 }
 
@@ -626,11 +632,13 @@ const faceTest = document.getElementById('face-test');
 const poseTest = document.getElementById('pose-test');
 for (const n of EXPRESSIONS) faceTest.add(new Option(n, n));
 for (const n of Object.keys(POSTURES)) poseTest.add(new Option(n.replace('_', ' '), n));
+for (const n of [...FIDGET_NAMES, 'pace']) poseTest.add(new Option(`idle: ${n.replace('_', ' ')}`, `npc:${n}`));
 faceTest.add(new Option('eye-roll', 'eyeroll'));
 for (const sel of [faceTest, poseTest]) {
   sel.addEventListener('change', () => {
     if (!character || !sel.value) return;
     if (sel.value === 'eyeroll') character.eyeRoll();
+    else if (sel.value.startsWith('npc:')) character.npc.play(sel.value.slice(4));
     else if (sel === faceTest) character.express(sel.value, null, 1);
     else character.express(null, sel.value);
     character.settle(4);
@@ -638,6 +646,74 @@ for (const sel of [faceTest, poseTest]) {
     sel.blur(); // keep keyboard shortcuts working
   });
 }
+
+// --- phone controller (server/remote.js relays these over Vite's WebSocket; all local) ---
+// The phone sends { to: 'booth', type: ... }; the booth answers with { to: 'phone', type: ... }.
+const ammoState = {};
+let phoneSeen = -Infinity;
+function sendPhone(msg) { import.meta.hot?.send('pie:remote', { to: 'phone', ...msg }); }
+
+// What the phone draws its buttons from, so labels/costs live in one place (THROWABLES, HARMS).
+function catalog() {
+  const item = (name, spec, group) => ({ name, label: spec.label.replace(/^\S+\s/, ''), icon: spec.label.split(' ')[0], group });
+  return [
+    ...Object.entries(THROWABLES).map(([n, sp]) => item(n, sp, 'throw')),
+    ...Object.entries(HARMS).map(([n, sp]) => item(n, sp, sp.kind || n === 'repair' ? 'kind' : 'hurt')),
+  ];
+}
+function phoneStatus() {
+  if (!character) return 'loading';
+  if (character.off) return 'unplugged';
+  if (character.erase) return 'deleted';
+  if (character.evict) return 'in space';
+  if (listener.rec || character.listening) return 'listening';
+  if (speaker?.busy) return 'speaking';
+  if (brainStatus.textContent === 'thinking…') return 'thinking';
+  return 'idle';
+}
+function sendFullState() {
+  sendPhone({ type: 'hello', catalog: catalog(), ammo: ammoState, ledger: [...ledger], status: phoneStatus(), caption: caption.textContent });
+}
+
+import.meta.hot?.on('pie:remote', (m) => {
+  if (m.to !== 'booth') return;
+  const fresh = performance.now() - phoneSeen > 6000;
+  phoneSeen = performance.now();
+  if (m.type === 'hello' || fresh) sendFullState();
+  if (m.type === 'act') act(m.name, Math.max(0.6, Math.min(1.8, m.strength ?? 1)));
+  if (m.type === 'say') { character?.setListening(false); converse(String(m.text ?? '').slice(0, 300).trim()); }
+  if (m.type === 'listen' && character) {
+    if (m.on) {
+      cancelLull(); convId++; speaker.stop();
+      character.setListening(true);
+      caption.classList.add('heard'); caption.textContent = '…';
+    } else character.setListening(false);
+  }
+  if (m.type === 'interim') { caption.classList.add('heard'); caption.textContent = `“${m.text}”`; }
+  if (m.type === 'visitor') newVisitor();
+});
+
+// mirror the caption and status to the phone as they change
+new MutationObserver(() => sendPhone({ type: 'caption', text: caption.textContent, heard: caption.classList.contains('heard') }))
+  .observe(caption, { childList: true, characterData: true, subtree: true });
+let lastStatus = '';
+setInterval(() => {
+  const st = phoneStatus();
+  if (st !== lastStatus) { lastStatus = st; sendPhone({ type: 'status', status: st }); }
+  // a phone is connected: hide every laptop control so the booth is just Pie
+  const paired = performance.now() - phoneSeen < 6000;
+  document.body.classList.toggle('remote', paired);
+}, 300);
+
+// no phone yet: a small QR code to pair one
+fetch('/api/remote/info').then((r) => r.json()).then(({ urls }) => {
+  if (!urls.length) return;
+  const qr = qrcode(0, 'M');
+  qr.addData(urls[0]);
+  qr.make();
+  document.getElementById('pair-qr').innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+  document.getElementById('pair-url').textContent = urls[0].replace('https://', '').replace(/\?.*/, '');
+}).catch(() => {});
 
 // --- loop ---
 const timer = new THREE.Timer();

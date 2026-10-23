@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#05080c" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>Pie Remote</title>
+    <link rel="stylesheet" href="/src/remote.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand"><span class="dot" id="dot"></span>Pie</div>
+      <div class="status" id="status">Looking for the booth…</div>
+    </header>
+    <section class="caption" id="caption"><span class="muted">Say hello. Pie is listening.</span></section>
+
+    <main>
+      <section class="panel on" data-panel="talk">
+        <button class="mic" id="mic"><span class="mic-ring"></span><span class="mic-icon">🎙️</span><span class="mic-label">Hold to talk</span></button>
+        <form class="type" id="type"><input id="text" placeholder="…or type to Pie" autocomplete="off" enterkeyhint="send" /><button>Send</button></form>
+        <div class="chips" id="chips"></div>
+        <div class="row">
+          <button class="ghost" data-booth="visitor">New visitor</button>
+          <button class="ghost danger" data-act="evict">🚀 Evict</button>
+        </div>
+      </section>
+      <section class="panel" data-panel="throw"><p class="hint">Three of each. They refill.</p><div class="grid" id="grid-throw"></div></section>
+      <section class="panel" data-panel="hurt"><p class="hint">Every choice has a cost.</p><div class="grid" id="grid-hurt"></div></section>
+      <section class="panel" data-panel="kind"><p class="hint">Kindness has a cost too.</p><div class="grid" id="grid-kind"></div></section>
+      <section class="panel" data-panel="motion">
+        <div class="tools" id="tools"></div>
+        <div class="meter" id="meter">
+          <svg viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="52" /><circle class="level" id="level" cx="60" cy="60" r="52" /><circle class="mark" id="mark" cx="60" cy="60" r="52" /></svg>
+          <div class="meter-center"><span id="tool-icon">🏏</span><small id="tool-hint">Swing your phone like a bat</small></div>
+        </div>
+        <button class="primary" id="enable-motion">Enable motion</button>
+        <p class="hint" id="motion-note">Hold the phone firmly. Swing harder to hit harder.</p>
+      </section>
+    </main>
+
+    <nav id="tabs">
+      <button data-tab="talk" class="on"><span>💬</span>Talk</button>
+      <button data-tab="throw"><span>🥧</span>Throw</button>
+      <button data-tab="hurt"><span>🔨</span>Hurt</button>
+      <button data-tab="kind"><span>🤗</span>Kind</button>
+      <button data-tab="motion"><span>📳</span>Motion</button>
+    </nav>
+
+    <div class="sheet" id="sheet">
+      <div class="grabber"></div>
+      <h2>Tradeoff</h2>
+      <p class="chose" id="sheet-chose"></p>
+      <p><b class="got">You got</b> <span id="sheet-got"></span></p>
+      <p><b class="cost">It cost</b> <span id="sheet-cost"></span></p>
+      <div class="ledger" id="ledger"></div>
+    </div>
+    <script type="module" src="/src/remote.js"></script>
+  </body>
+</html>

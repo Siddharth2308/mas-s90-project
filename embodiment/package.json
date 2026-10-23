@@ -10,6 +10,7 @@
     "setup:voice": "bash tts/setup.sh"
   },
   "dependencies": {
+    "qrcode-generator": "2.0.4",
     "three": "0.185.0"
   },
   "devDependencies": {

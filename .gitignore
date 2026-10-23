@@ -12,3 +12,6 @@ __pycache__/
 # Blender backups and preview renders
 *.blend1
 blender/renders/
+
+# self-signed cert for the phone controller (made by embodiment/server/remote.js)
+embodiment/.cert/

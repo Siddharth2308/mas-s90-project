@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Mouth } from './mouth.js';
+import { Npc } from './npc.js';
 
 // Layer 1 = visual effects (mouth, splats, particles...). Rendered, but ignored by hit tests.
 export const FX_LAYER = 1;
@@ -133,6 +134,9 @@ class Character {
     this.dodge = null;
     this.dodgeCooldown = 0;
     this.baseX = this.root.position.x;
+    this.baseY = this.root.position.y;
+    this.lastEngaged = 0;  // elapsed time of the last thing that had his attention (NPC idling waits for a lull)
+    this.eyesShut = false; // held shut by an idle fidget (yawn)
     this.evict = null;     // eviction sequence state
     this.glitchT = 0;      // seconds of glitching left
     this.glitchAmp = 0;
@@ -143,6 +147,7 @@ class Character {
     this.makeRocketFlame();
     this.makeStars();
     this.makeScanRing();
+    this.npc = new Npc(this);
   }
 
   // three.js drops dots from names and suffixes duplicates ("Torso" -> "Torso_1").
@@ -412,12 +417,14 @@ class Character {
 
   // While he "thinks" about your question: a glance up and to the side.
   thinking() {
+    this.lastEngaged = this.elapsed;
     this.gazeTarget = { x: 0.35, y: 0.3 };
     this.saccadeIn = 0.9;
   }
 
   // Set his expression and/or posture (null keeps the current one). Holds until settle().
   express(name, posture, weight = 1) {
+    this.lastEngaged = this.elapsed;
     if (name && EXPRESSIONS.includes(name)) this.mood = { name, weight };
     if (posture && POSTURES[posture]) this.posture = posture;
     this.moodHold = Infinity;
@@ -428,10 +435,11 @@ class Character {
 
   flash(name, amount) { this.flashes[name] = Math.max(this.flashes[name] ?? 0, amount); }
 
-  eyeRoll() { this.eyeRollT = 0; }
+  eyeRoll() { this.eyeRollT = 0; this.lastEngaged = this.elapsed; }
 
   setListening(on) {
     this.listening = on;
+    this.lastEngaged = this.elapsed;
     this.gazeTarget = { x: 0, y: -0.12 };
   }
 
@@ -591,7 +599,15 @@ class Character {
     addIdleOffset(this.bone('Head'), new THREE.Vector3(1, 0, 0), Math.sin(this.elapsed * 5) * speaking * 0.012);
     addIdleOffset(this.bone('UpperArm.L'), new THREE.Vector3(1, 0, 0), breathe * 0.006);
     addIdleOffset(this.bone('UpperArm.R'), new THREE.Vector3(1, 0, 0), -breathe * 0.006);
+    if (this.mouth.scale[1] > 0.2) this.lastEngaged = this.elapsed; // talking counts as engaged
     this.updatePosture(dt, addIdleOffset);
+    const parentQ = new THREE.Quaternion();
+    this.npc.update(dt, (name, axis, angle) => { // world-axis offsets, like postures
+      const bone = this.bone(name);
+      if (!bone?.parent || !angle) return;
+      bone.parent.getWorldQuaternion(parentQ).invert();
+      addIdleOffset(bone, axis.clone().applyQuaternion(parentQ), angle);
+    });
     this.updateFace(dt);
     this.mouth.update(dt);
   }
@@ -653,7 +669,7 @@ class Character {
       this.face.Blink = Math.sin(Math.min(1, this.blinkT / 0.16) * Math.PI);
       if (this.blinkT > 0.16) this.blinkT = -1;
     }
-    if (this.off) this.face.Blink = 1; // unplugged: eyes shut
+    if (this.off || this.eyesShut) this.face.Blink = 1; // unplugged or mid-yawn: eyes shut
     for (const mesh of this.faceMeshes) {
       for (const [name, v] of Object.entries(this.face)) {
         const i = mesh.morphTargetDictionary[name];

@@ -35,6 +35,14 @@
       #caption { position: fixed; left: 0; right: 0; top: 16px; padding: 0 16px; text-align: center; color: #bbb; font: 16px sans-serif; }
       #caption.heard { color: #7c9; font-style: italic; }
       #brain { position: fixed; left: 12px; top: 12px; color: #6a8; font: 12px monospace; }
+      /* phone pairing card (hidden while a phone is connected, and in booth mode) */
+      #pair { position: fixed; left: 14px; bottom: 34px; display: flex; gap: 12px; align-items: center; padding: 10px 14px 10px 10px;
+        background: rgba(8, 14, 18, 0.82); border: 1px solid #1f4f5c; border-radius: 12px; color: #9cc; font: 12px/1.4 sans-serif; }
+      #pair-qr { width: 92px; height: 92px; background: #fff; border-radius: 6px; overflow: hidden; }
+      #pair-qr svg { width: 100%; height: 100%; display: block; }
+      #pair b { display: block; color: #55e6ff; font-size: 13px; letter-spacing: 0.04em; margin-bottom: 2px; }
+      #pair-url { color: #6aa; font-family: monospace; }
+      body.remote #controls, body.remote #status, body.remote #brain, body.remote #pair, body.booth #pair { display: none; }
       body.booth #controls, body.booth #status, body.booth #caption, body.booth #brain { display: none; }
     </style>
   </head>
@@ -48,6 +56,10 @@
     </div>
     <div id="ledger"></div>
     <div id="flash"></div>
+    <div id="pair">
+      <div id="pair-qr"></div>
+      <div><b>Play from your phone</b>Same Wi-Fi, scan the code<br />and tap past the warning.<br /><span id="pair-url"></span></div>
+    </div>
     <div id="brain"></div>
     <div id="status">Loading character…</div>
     <div id="controls">

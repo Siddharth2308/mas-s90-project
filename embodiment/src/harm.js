@@ -29,11 +29,11 @@ export class Harm {
     this.on = {};         // impact(kind)
   }
 
-  // Run one strike; resolves after the impact.
-  strike(kind) {
+  // Run one strike; resolves after the impact. strength scales the force (a hard phone swing hits harder).
+  strike(kind, strength = 1) {
     const spec = TOOLS[kind];
     const { point, dir } = this.character.surfacePoint(spec.part, spec.from);
-    if (kind === 'headbutt') return this.headbutt(point, dir);
+    if (kind === 'headbutt') return this.headbutt(point, dir, strength);
     const mesh = makeTool(kind);
     mesh.traverse((o) => o.layers.set(FX_LAYER));
     this.scene.add(mesh);
@@ -47,7 +47,7 @@ export class Harm {
     sfx.swing();
     return new Promise((resolve) => {
       this.moves.push({
-        kind, spec, mesh, curve: new THREE.QuadraticBezierCurve3(start, ctrl, end), t: 0, point, dir,
+        kind, spec, mesh, curve: new THREE.QuadraticBezierCurve3(start, ctrl, end), t: 0, point, dir, strength,
         onImpact: resolve,
       });
     });
@@ -60,13 +60,13 @@ export class Harm {
     this.lunge = { t: 0, vec: to.normalize().multiplyScalar(dist), inT, hold, outT, onPeak, peaked: false };
   }
 
-  headbutt(point, dir) {
+  headbutt(point, dir, strength = 1) {
     // camera rushes at his face and snaps back
     return new Promise((resolve) => this.moveCamera(point, 1.1, 0.26, 0, 0.45, () => {
-      this.character.strike(point, dir.clone().negate(), 'headbutt', TOOLS.headbutt.force);
+      this.character.strike(point, dir.clone().negate(), 'headbutt', TOOLS.headbutt.force * strength);
       this.burst(point, dir.clone().negate(), 10);
       sfx.headbutt();
-      this.on.impact?.('headbutt');
+      this.on.impact?.('headbutt', strength);
       resolve();
     }));
   }
@@ -197,7 +197,7 @@ export class Harm {
     m.after = 0;
     const into = m.point.clone().sub(m.curve.v0).normalize();
     m.back = into.clone().negate().add(new THREE.Vector3(0, 0.3, 0));
-    this.character.strike(m.point, into, m.kind, m.spec.force);
+    this.character.strike(m.point, into, m.kind, m.spec.force * (m.strength ?? 1));
     this.burst(m.point, m.dir.clone().negate(), m.kind === 'stab' ? 12 : 22);
     const anchor = this.character.nearestBone(m.point);
     if (m.spec.wound) this.addWound(m.spec.wound, m.point, m.dir.clone().negate(), anchor);
@@ -206,7 +206,7 @@ export class Harm {
       this.leaks.push({ anchor, local: anchor.worldToLocal(m.point.clone()), t: 0, life: m.kind === 'stab' ? 6 : 3 });
     }
     sfx[m.kind]?.();
-    this.on.impact?.(m.kind);
+    this.on.impact?.(m.kind, m.strength ?? 1);
     m.onImpact();
   }
 

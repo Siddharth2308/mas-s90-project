@@ -544,9 +544,14 @@ loadCharacter(MODEL_URL, (p) => {
 });
 
 // --- buttons + keyboard ---
+const ACTION_COOLDOWN_MS = 1100;
+let actionReadyAt = 0;
 function act(name, strength = 1) {
-  cancelLull(); // they are busy throwing things, not drifting away
   if (!character) return;
+  const now = performance.now();
+  if (now < actionReadyAt) return;
+  actionReadyAt = now + ACTION_COOLDOWN_MS;
+  cancelLull(); // they are busy throwing things, not drifting away
   if (name === 'talk') {
     character.express(pick(EXPRESSIONS), pick(Object.keys(POSTURES)));
     return say(pick(LINES.talk));

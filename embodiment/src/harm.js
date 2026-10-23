@@ -71,7 +71,7 @@ export class Harm {
     }));
   }
 
-  // Kind actions: hug (camera moves in close and stays), flowers (a bouquet he keeps), pat (sparkles on his head).
+  // Kind actions: camera hug, carried flowers, visible hand contact, and a head pat.
   kindness(kind) {
     const c = this.character;
     if (kind === 'hug') {
@@ -108,19 +108,28 @@ export class Harm {
       this.scene.add(mesh);
       c.receive(kind); // he starts raising his hand right away
       return new Promise((resolve) => this.moves.push({
-        kind, spec: { dur: 0.6, stays: false, touch: true }, mesh, point: meet, dir,
-        curve: new THREE.QuadraticBezierCurve3(start, meet.clone().add(new THREE.Vector3(0.3, -0.2, 1.5)), meet), t: 0,
+        kind, spec: { dur: 0.72, stays: false, touch: true }, mesh, point: meet, dir,
+        curve: new THREE.QuadraticBezierCurve3(start, meet.clone().add(new THREE.Vector3(0.15, -0.25, 1.25)), meet), t: 0,
         onImpact: resolve,
       }));
     }
-    // pat
+    // A relaxed open hand reaches over the head, gives two light pats, then withdraws.
     const top = new THREE.Box3().setFromObject(c.root).max;
     const head = c.bone('Head').getWorldPosition(new THREE.Vector3());
-    const point = new THREE.Vector3(head.x, top.y - 0.3, head.z);
+    const point = new THREE.Vector3(head.x, Math.min(top.y + 0.08, head.y + 0.24), head.z + 0.05);
+    const start = point.clone().add(new THREE.Vector3(0.18, 0.9, 1.45));
+    const hand = makeOpenHand();
+    hand.rotation.x = Math.PI / 2; // palm faces down toward the head
+    hand.traverse((o) => o.layers.set(FX_LAYER));
+    hand.position.copy(start);
+    this.scene.add(hand);
     c.receive('pat');
-    sfx.sparkle();
-    this.motes(point, 14, 0.6);
-    return Promise.resolve();
+    sfx.swing();
+    return new Promise((resolve) => this.moves.push({
+      kind: 'pat', spec: { dur: 0.62, stays: false, touch: true, pat: true }, mesh: hand, point, dir: new THREE.Vector3(0, -1, 0),
+      curve: new THREE.QuadraticBezierCurve3(start, point.clone().add(new THREE.Vector3(0, 0.45, 0.7)), point), t: 0,
+      onImpact: resolve,
+    }));
   }
 
   // Warm floating specks (pink and gold) that drift up and fade.
@@ -137,13 +146,20 @@ export class Harm {
       m.t += dt;
       if (!m.hit) {
         const k = Math.min(1, m.t / m.spec.dur);
-        const e = k * k; // accelerate into the hit
-        m.mesh.position.copy(m.curve.getPoint(m.spec.gentle ? k * (2 - k) : e)); // gifts slow down, weapons speed up
+        const e = k * k * (3 - 2 * k); // ease into contact instead of snapping to the target
+        m.mesh.position.copy(m.curve.getPoint(m.spec.gentle ? k * (2 - k) : e));
         if (!m.spec.gentle && !m.spec.touch) {
           m.mesh.lookAt(m.mesh.position.clone().add(m.curve.getTangent(e)));
           if (m.kind !== 'stab') m.mesh.rotateZ((1 - k) * 0.8);
         }
         if (k >= 1) (m.spec.gentle ? this.place(m) : m.spec.touch ? this.touch(m) : this.impact(m));
+      } else if (m.spec.pat) {
+        m.after += dt;
+        // Two small, damped taps, followed by a gentle lift away from the head.
+        const tap = m.after < 0.42 ? Math.abs(Math.sin(m.after * 2 * Math.PI / 0.28)) * Math.exp(-m.after * 1.7) : 0;
+        m.mesh.position.copy(m.point).add(new THREE.Vector3(0, tap * 0.12 + Math.max(0, m.after - 0.42) * 1.8, 0));
+        m.mesh.traverse((o) => { if (o.material) { o.material.transparent = true; o.material.opacity = Math.max(0, 1 - Math.max(0, m.after - 0.42) / 0.28); } });
+        if (m.after > 0.72) m.done = true;
       } else if (!m.spec.stays) {
         // recoil and fade
         m.after += dt;
@@ -227,6 +243,14 @@ export class Harm {
     m.after = 0;
     m.back = new THREE.Vector3(0.3, -0.4, 1.2);
     const c = this.character;
+    if (m.spec.pat) {
+      c.flash('Happy', 0.45);
+      c.settle(2.5);
+      sfx.sparkle();
+      this.motes(m.point, 8, 0.22);
+      m.onImpact();
+      return;
+    }
     c.flash('Happy', 1);
     c.flash('Surprised', 0.25);
     c.settle(2.5);

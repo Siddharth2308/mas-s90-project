@@ -17,11 +17,11 @@
       #controls .harm { border-color: #a63; color: #fdc; }
       #controls .repair { border-color: #3a8; color: #cfe; }
       #controls .kind { border-color: #c69; color: #fde; }
-      /* the tradeoff card stays visible in booth mode: it is part of the piece */
-      #tradeoff { position: fixed; left: 50%; top: 18%; transform: translate(-50%, -8px); width: min(460px, 86vw); padding: 14px 18px;
+      /* Keep the tradeoff card beside the character instead of over the center. */
+      #tradeoff { position: fixed; right: 3vw; top: 50%; transform: translateY(calc(-50% - 8px)); width: min(400px, 30vw); padding: 16px 20px;
         background: rgba(8, 14, 18, 0.88); border: 1px solid #2c6f80; border-radius: 8px; color: #cfe; font: 14px/1.45 sans-serif;
         opacity: 0; transition: opacity 0.4s, transform 0.4s; pointer-events: none; }
-      #tradeoff.on { opacity: 1; transform: translate(-50%, 0); }
+      #tradeoff.on { opacity: 1; transform: translateY(-50%); }
       #tradeoff h2 { margin: 0 0 6px; font: 600 11px/1 sans-serif; letter-spacing: 0.18em; color: #55e6ff; }
       #tradeoff .chose { color: #fff; font-weight: 600; }
       #tradeoff b { color: #8fb; font-weight: 600; }
@@ -42,6 +42,10 @@
       #pair-qr svg { width: 100%; height: 100%; display: block; }
       #pair b { display: block; color: #55e6ff; font-size: 13px; letter-spacing: 0.04em; margin-bottom: 2px; }
       #pair-url { color: #6aa; font-family: monospace; }
+      @media (max-width: 760px) {
+        #tradeoff { right: 16px; left: 16px; top: auto; bottom: 24px; width: auto; transform: translateY(8px); }
+        #tradeoff.on { transform: translateY(0); }
+      }
       body.remote #controls, body.remote #status, body.remote #brain, body.remote #pair, body.booth #pair { display: none; }
       body.booth #controls, body.booth #status, body.booth #caption, body.booth #brain { display: none; }
     </style>
